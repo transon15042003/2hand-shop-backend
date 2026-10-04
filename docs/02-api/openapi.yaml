@@ -1,0 +1,3541 @@
+openapi: 3.0.3
+info:
+  title: 2hand-shop API Contract
+  version: 1.0.0
+  license:
+    name: MIT
+  description: |
+    API Contract chuẩn hóa cho hệ thống cửa hàng đồ si tuyển chọn độc bản (1-of-1) 2hand-shop.
+    Tài liệu này đóng vai trò Single Source of Truth (SSOT) cho việc phát triển Frontend độc lập với Mock Service (MSW) và Backend sau này.
+
+    Quy chuẩn nghiệp vụ cốt lõi:
+    - Mỗi món hàng là độc bản duy nhất (1-of-1), số lượng tồn kho = 1.
+    - Phân loại chi tiết sản phẩm: `t_shirts`, `shirts`, `sweaters`, `jackets`, `blazers`, `pants`, `shorts`, `skirts`, `dresses`, `bags`, `scarves`, `hats`, `accessories`.
+    - 5 Cấp độ tình trạng chuẩn hóa: `new`, `like_new`, `good`, `fair`, `attention_required`.
+    - Tuyệt đối không dùng điểm lẻ (9.5/10), thang phần trăm hoặc mã SKU (dùng Mã món - `item_id`).
+    - 6 Trạng thái đơn hàng: `new`, `confirmed`, `shipping`, `completed`, `returned`, `cancelled`.
+    - 3 Trạng thái thu tiền: `unpaid`, `pending_cod`, `paid`.
+    - Tiền tệ: Đồng Việt Nam (VND, số nguyên integer).
+
+servers:
+  - url: http://localhost:3000/api
+    description: Mock API Server / Local Development
+
+paths:
+  # ==========================================
+  # PUBLIC STOREFRONT ENDPOINTS
+  # ==========================================
+
+  /items:
+    get:
+      operationId: getPublicItems
+      summary: Lấy danh sách món đang mở bán trên kệ hàng
+      description: Trả về danh sách các món đồ có trạng thái `shelf`. Hỗ trợ tìm kiếm, lọc theo phân loại, tình trạng, khoảng giá.
+      tags:
+        - Storefront Items
+      security: []
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ItemCategory'
+          description: Lọc theo phân loại trang phục
+        - name: condition
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ItemCondition'
+          description: Lọc theo cấp độ tình trạng
+        - name: min_price
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Mức giá tối thiểu (VND)
+        - name: max_price
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Mức giá tối đa (VND)
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Từ khóa tìm kiếm theo tên món hoặc mã món
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [newest, price_asc, price_desc]
+            default: newest
+          description: Sắp xếp theo mới nhất hoặc giá
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 12
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Danh sách món đồ phù hợp bộ lọc
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - pagination
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ItemPublicSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /items/{id}:
+    get:
+      operationId: getPublicItemDetail
+      summary: Lấy chi tiết một món hàng cụ thể
+      description: |
+        Trả về đầy đủ số đo centimet phẳng thủ công, chất liệu, ảnh chụp macro và ghi chú khuyết điểm (nếu có).
+        Món `shelf` và `reserved` trả 200 (món đang giữ chỗ hiện trạng thái, không cho thêm giỏ). Món `draft` hoặc `sold` trả 404 (đã rời kệ). Xem ADR 003 D1.
+      tags:
+        - Storefront Items
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Mã món lưu trữ (VD "KN2410-001")
+      responses:
+        '200':
+          description: Chi tiết món hàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPublicDetail'
+        '404':
+          description: Không tìm thấy món đồ hoặc món đã rời kệ (đã bán / bản nháp)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders:
+    post:
+      operationId: createPublicOrder
+      summary: Đặt mua hàng (Tạo đơn hàng mới)
+      description: |
+        Khách gửi thông tin đặt mua. Hệ thống kiểm tra điều kiện độc bản 1-of-1:
+        Tất cả món trong giỏ phải đang ở trạng thái `shelf`.
+        Nếu thỏa mãn, lập tức chuyển trạng thái các món sang `reserved` (giữ chỗ) và tạo đơn ở trạng thái `new`.
+        Phí ship tạm thời để `null` vì chủ shop sẽ liên hệ báo phí ship theo địa chỉ thực tế.
+        Bearer token của khách là tùy chọn: nếu có và hợp lệ, đơn được gắn với tài khoản (hiện trong `/me/orders`).
+        `item_ids` trùng nhau được gộp lại.
+        Bắt buộc `policy_accepted: true` và `policy_version` hiện hành (ADR 005); server lưu giờ đồng ý trên đơn.
+        Đơn mới được giữ `order_hold_minutes` phút (`hold_expires_at`). Hết giờ mà chưa xác nhận thì đơn tự hủy, món về kệ.
+      tags:
+        - Storefront Orders
+      security:
+        - {}
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Đặt hàng thành công, đơn đã được tạo và các món đã được giữ chỗ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderConfirmationResponse'
+        '400':
+          description: Dữ liệu đặt hàng không hợp lệ (thiếu SĐT, địa chỉ...). `fields` chỉ ra ô cần sửa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Xung đột độc bản - một hoặc nhiều món trong đơn đã có người khác đặt trước hoặc không còn trên kệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderConflictResponse'
+
+  /orders/track:
+    get:
+      operationId: trackPublicOrder
+      summary: Tra cứu tiến độ đơn hàng
+      description: Khách tra cứu trạng thái đơn, mã vận đơn, tiến độ bưu cục bằng cặp Mã đơn hàng + Số điện thoại đặt hàng.
+      tags:
+        - Storefront Orders
+      security: []
+      parameters:
+        - name: order_code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Mã đơn hàng (VD "DH-260901")
+        - name: phone
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Số điện thoại người nhận đã đăng ký khi đặt
+      responses:
+        '200':
+          description: Thông tin tiến độ đơn hàng và thông tin vận đơn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderTrackingDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Không tìm thấy đơn hàng khớp với mã đơn và số điện thoại cung cấp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{order_code}/cancel:
+    post:
+      operationId: cancelPublicOrder
+      summary: Khách tự hủy đơn
+      description: |
+        Khách hủy đơn của mình bằng Mã đơn + Số điện thoại đặt hàng (như tra cứu; khách đã đăng nhập cũng gửi số điện thoại của đơn).
+        Chỉ khi đơn `new` hoặc `confirmed`. Đơn đã giao bưu cục, hoàn tất, đã trả hoặc đã hủy → 409 `CANCEL_NOT_ALLOWED` (đơn đang giao: liên hệ shop).
+        Tiền cọc (ADR 005): hủy trước khi shop xác nhận → hoàn cọc đã nhận (`refunded`), cọc chưa nhận thì `voided`; hủy sau khi đơn đã xác nhận (kể cả tự động xác nhận) → mất cọc (`forfeited`).
+        Món trong đơn về lại kệ. Ghi `cancelled_by` = `customer`.
+        Gửi `expected_status` (trạng thái khách đang thấy); nếu đơn vừa đổi trạng thái → 409 `ORDER_STATUS_CHANGED`, khách xem lại hậu quả về cọc rồi mới hủy.
+      tags:
+        - Storefront Orders
+      security: []
+      parameters:
+        - name: order_code
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Mã đơn hàng (VD "DH-260921")
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCancelRequest'
+      responses:
+        '200':
+          description: Đã hủy đơn; trả về tiến độ đơn mới nhất
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderTrackingDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Không tìm thấy đơn khớp mã đơn và số điện thoại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /orders/deposit-check:
+    get:
+      operationId: checkOrderDeposit
+      summary: Kiểm tra đơn có cần cọc không (theo số điện thoại)
+      description: |
+        Quy tắc cọc (ADR 004): số điện thoại chưa có đơn nào ở trạng thái `completed` phải cọc cho đơn mới. Số tiền theo cài đặt `deposit_amount` (ADR 005, mặc định 50.000₫); bằng 0 thì không đơn nào cần cọc.
+        Đã có ít nhất một đơn hoàn tất → không cần cọc. Áp dụng cả khi đặt không đăng nhập.
+        Khách đang đăng nhập (cookie phiên) mà tài khoản đã có đơn hoàn tất cũng không cần cọc, dù nhập số điện thoại nào.
+        Chỉ trả về có/không, không lộ lịch sử đơn hay tài khoản của số điện thoại.
+      tags:
+        - Storefront Orders
+      security: []
+      parameters:
+        - name: phone
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Số điện thoại người nhận (10–11 chữ số)
+      responses:
+        '200':
+          description: Kết quả kiểm tra cọc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositCheckResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /settings:
+    get:
+      operationId: getShopSettings
+      summary: Tham số nghiệp vụ và thông tin liên hệ / nhận cọc công khai
+      description: |
+        Giá trị hiện hành mà storefront cần để hiển thị chính sách và trang đặt hàng (ADR 005).
+        Chỉ áp dụng cho đơn tạo từ lúc này; đơn cũ giữ số đã chốt trên đơn (`deposit_amount`, `agreed_return_fee`, `return_window_days`).
+      tags:
+        - Storefront Settings
+      security: []
+      responses:
+        '200':
+          description: Tham số hiện hành
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShopSettings'
+
+  # ==========================================
+  # CUSTOMER AUTH ENDPOINTS
+  # ==========================================
+
+  /auth/register:
+    post:
+      operationId: registerCustomer
+      summary: Đăng ký tài khoản khách hàng mới
+      description: Tạo tài khoản thành viên mới bằng tên, số điện thoại, email và mật khẩu. Hệ thống sẽ tạo mã OTP xác thực 6 số gửi về email.
+      tags:
+        - Customer Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerRegisterRequest'
+      responses:
+        '201':
+          description: Đăng ký thành công, cần xác thực mã OTP gửi về email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerRegisterResponse'
+        '400':
+          description: Dữ liệu không hợp lệ hoặc email/số điện thoại đã tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/verify-email:
+    post:
+      operationId: verifyCustomerEmail
+      summary: Xác thực email tài khoản khách hàng
+      description: Nhập mã OTP 6 số nhận được qua email để kích hoạt tài khoản.
+      tags:
+        - Customer Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerVerifyEmailRequest'
+      responses:
+        '200':
+          description: Xác thực thành công, tài khoản đã được kích hoạt
+          headers:
+            Set-Cookie:
+              description: Cấp phiên `2hand_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerAuthResponse'
+        '400':
+          description: Mã xác thực không chính xác hoặc đã hết hạn (`INVALID_OTP_CODE`), hoặc tài khoản đã xác thực trước đó (`ALREADY_VERIFIED`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/resend-code:
+    post:
+      operationId: resendVerificationCode
+      summary: Gửi lại mã xác thực email
+      description: Phát sinh và gửi lại mã OTP 6 số mới tới email của khách hàng.
+      tags:
+        - Customer Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Mã xác thực mới đã được gửi
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - message
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Email không tồn tại hoặc lỗi xử lý
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      operationId: loginCustomer
+      summary: Đăng nhập tài khoản khách hàng
+      description: |
+        Đăng nhập bằng Email hoặc Số điện thoại kèm Mật khẩu. Yêu cầu tài khoản đã xác thực email.
+        Phiên lâu dài (ADR 006): trả cookie httpOnly `2hand_customer_session` (400 ngày, gia hạn khi dùng); khách ở trạng thái đăng nhập trên thiết bị đó tới khi bấm Đăng xuất.
+      tags:
+        - Customer Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerLoginRequest'
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          headers:
+            Set-Cookie:
+              description: Cấp phiên `2hand_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerAuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: |
+            Sai thông tin đăng nhập (`INVALID_CREDENTIALS`) hoặc tài khoản chưa xác thực email (`EMAIL_NOT_VERIFIED`, kèm `email` để giao diện chuyển sang bước nhập OTP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/me:
+    get:
+      operationId: getCurrentCustomer
+      summary: Lấy thông tin hồ sơ khách hàng hiện tại
+      description: Trả về thông tin cá nhân và trạng thái xác thực của khách hàng đang đăng nhập.
+      tags:
+        - Customer Auth
+      security:
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      responses:
+        '200':
+          description: Lấy thông tin hồ sơ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfile'
+        '401':
+          description: Chưa đăng nhập hoặc phiên đã hết hạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateCurrentCustomer
+      summary: Cập nhật hồ sơ khách hàng hiện tại
+      description: Đổi họ tên và địa chỉ giao hàng mặc định (một địa chỉ, ADR 003 D6). Email và số điện thoại không đổi ở đây (D9).
+      tags:
+        - Customer Auth
+      security:
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerProfileUpdateRequest'
+      responses:
+        '200':
+          description: Hồ sơ sau khi cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/change-password:
+    post:
+      operationId: changeCustomerPassword
+      summary: Đổi mật khẩu khách hàng
+      tags:
+        - Customer Auth
+      security:
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - current_password
+                - new_password
+              properties:
+                current_password:
+                  type: string
+                  format: password
+                new_password:
+                  type: string
+                  format: password
+                  minLength: 6
+      responses:
+        '200':
+          description: Đổi mật khẩu thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Mật khẩu hiện tại sai hoặc mật khẩu mới chưa hợp lệ (`fields` chỉ ra ô lỗi)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/orders:
+    get:
+      operationId: getMyOrders
+      summary: Danh sách đơn của khách đang đăng nhập
+      tags:
+        - Customer Orders
+      security:
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      responses:
+        '200':
+          description: Đơn của khách, mới nhất trước
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - orders
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CustomerOrderSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me/orders/{order_code}:
+    get:
+      operationId: getMyOrderDetail
+      summary: Chi tiết một đơn của khách đang đăng nhập
+      description: Đơn của khách khác hoặc mã không tồn tại đều trả 404 (không lộ thông tin).
+      tags:
+        - Customer Orders
+      security:
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      parameters:
+        - name: order_code
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Mã đơn hàng (VD "DH-260921")
+      responses:
+        '200':
+          description: Chi tiết đơn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderTrackingDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /auth/logout:
+    post:
+      operationId: logoutCustomer
+      summary: Đăng xuất tài khoản khách hàng (thiết bị này)
+      description: Hủy phiên đăng nhập hiện tại (cookie hoặc Bearer) và xóa cookie trên thiết bị này. Các thiết bị khác vẫn đăng nhập (ADR 006).
+      tags:
+        - Customer Auth
+      security: []
+      responses:
+        '200':
+          description: Đăng xuất thành công
+          headers:
+            Set-Cookie:
+              description: Xóa cookie phiên `2hand_customer_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - message
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Yêu cầu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/session:
+    get:
+      operationId: getCustomerSession
+      summary: Phiên đăng nhập hiện tại của thiết bị (luôn 200)
+      description: |
+        Web gọi khi tải trang để biết thiết bị này có đang đăng nhập không (cookie httpOnly nên script không tự đọc được). Không có phiên thì trả `customer: null` thay vì 401. Có phiên thì cookie được gia hạn thêm 400 ngày (ADR 006).
+      tags:
+        - Customer Auth
+      security:
+        - {}
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      responses:
+        '200':
+          description: Hồ sơ khách nếu đang đăng nhập, ngược lại null
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - customer
+                properties:
+                  customer:
+                    type: object
+                    allOf:
+                      - $ref: '#/components/schemas/CustomerProfile'
+                    nullable: true
+
+  /auth/logout-all:
+    post:
+      operationId: logoutCustomerEverywhere
+      summary: Đăng xuất khỏi mọi thiết bị
+      description: Hủy mọi phiên của tài khoản (kể cả thiết bị này) và xóa cookie trên thiết bị này. Dùng khi mất điện thoại hoặc lỡ đăng nhập máy lạ (ADR 006).
+      tags:
+        - Customer Auth
+      security:
+        - CustomerSessionCookie: []
+        - CustomerAuth: []
+      responses:
+        '200':
+          description: Đã hủy mọi phiên
+          headers:
+            Set-Cookie:
+              description: Xóa cookie phiên trên thiết bị này.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # ADMIN AUTH ENDPOINTS
+  # ==========================================
+
+  /admin/auth/login:
+    post:
+      operationId: loginAdmin
+      summary: Đăng nhập quản trị viên
+      description: Xác thực bằng mật khẩu duy nhất của chủ shop (ADR 001). Trả về Bearer Token. Mock dùng `MOCK_ADMIN_PASSWORD` (mặc định `admin123`).
+      tags:
+        - Admin Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          headers:
+            Set-Cookie:
+              description: Cấp phiên `2hand_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - token
+                  - user
+                properties:
+                  token:
+                    type: string
+                    example: "mock-jwt-admin-token"
+                  user:
+                    type: object
+                    required:
+                      - role
+                      - name
+                    properties:
+                      role:
+                        type: string
+                        enum: [admin]
+                      name:
+                        type: string
+                        example: "Chủ shop / Quản trị viên"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Sai mật khẩu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/auth/logout:
+    post:
+      operationId: logoutAdmin
+      summary: Đăng xuất quản trị viên
+      tags:
+        - Admin Auth
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Đã đăng xuất thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # ADMIN ITEMS MANAGEMENT
+  # ==========================================
+
+  /admin/items:
+    get:
+      operationId: getAdminItems
+      summary: Danh sách quản lý tất cả món hàng trong kho
+      description: Dành cho admin, xem được cả đồ nháp, đang giữ chỗ, đã bán và lưu kho.
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ItemStatus'
+        - name: category
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ItemCategory'
+        - name: condition
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ItemCondition'
+        - name: batch_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Lọc theo mã kiện hàng nhập về
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [newest, oldest, price_asc, price_desc, name_asc, name_desc]
+            default: newest
+          description: Sắp xếp theo ngày tạo, giá hoặc tên (trước khi phân trang)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Danh sách món đồ quản trị kèm thống kê nhanh số lượng
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - pagination
+                  - stats
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ItemAdminSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+                  stats:
+                    type: object
+                    required:
+                      - total_items
+                      - on_shelf
+                      - reserved
+                      - sold
+                      - draft
+                    properties:
+                      total_items:
+                        type: integer
+                        example: 248
+                      on_shelf:
+                        type: integer
+                        example: 180
+                      reserved:
+                        type: integer
+                        example: 12
+                      sold:
+                        type: integer
+                        example: 44
+                      draft:
+                        type: integer
+                        example: 12
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      operationId: createAdminItem
+      summary: Tạo mới một món đồ lưu trữ
+      description: |
+        Nhập thông tin món hàng. Nếu đầy đủ ảnh, kích thước và phân loại thì có thể đưa thẳng lên kệ (`shelf`), ngược lại lưu dạng nháp (`draft`).
+        Nếu tình trạng là `attention_required`, bắt buộc phải có mô tả vết lỗi và ít nhất 1 ảnh chụp cận cảnh khuyết điểm.
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemUpsertRequest'
+      responses:
+        '201':
+          description: Tạo món đồ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '400':
+          description: Dữ liệu không hợp lệ. Lưu thẳng lên kệ mà thiếu điều kiện trả `PUBLISH_REQUIREMENTS_NOT_MET` kèm `fields` (ví dụ thiếu ảnh lỗi khi chọn 'Cần lưu ý').
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/items/{id}:
+    get:
+      operationId: getAdminItemDetail
+      summary: Lấy chi tiết thông tin quản trị của một món
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Chi tiết món hàng đầy đủ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      operationId: updateAdminItem
+      summary: Cập nhật thông tin món hàng
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemUpsertRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Món đang giữ chỗ hoặc đã bán không đổi giá được (`PRICE_LOCKED`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/items/{id}/status:
+    patch:
+      operationId: updateAdminItemStatus
+      summary: Thay đổi nhanh trạng thái món đồ (Lên kệ / Gỡ về nháp)
+      description: |
+        Chỉ cho phép `draft` ↔ `shelf`. Lên kệ kiểm đủ điều kiện (tên, giá nguyên > 0, phân loại, tình trạng, ≥1 ảnh có alt, size, chất liệu, ≥1 số đo; `attention_required` cần mô tả lỗi và ≥1 ảnh lỗi).
+        Thiếu điều kiện → 400 `PUBLISH_REQUIREMENTS_NOT_MET` kèm `fields`. Món đang `reserved`/`sold` (nằm trong đơn) → 409 `ITEM_IN_ACTIVE_ORDER`.
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [draft, shelf]
+      responses:
+        '200':
+          description: Cập nhật trạng thái thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/uploads:
+    post:
+      operationId: uploadAdminImage
+      summary: Tải một ảnh món lên (ảnh chính hoặc ảnh lỗi)
+      description: |
+        Nhận `multipart/form-data` với trường `file`. Chỉ nhận JPEG, PNG, WebP, tối đa 5 MB. Trả về URL để dùng trong `images[].url` / `defect_images[].url`.
+        Mock giữ bytes trong RAM và phục vụ ở `/api/__mock/uploads/{id}` (không thuộc contract). Giai đoạn thật dùng Vercel Blob.
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Ảnh đã được lưu
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - url
+                properties:
+                  url:
+                    type: string
+                    example: "/api/__mock/uploads/up_1"
+        '400':
+          description: Sai định dạng (`UNSUPPORTED_FILE_TYPE`) hoặc quá 5 MB (`FILE_TOO_LARGE`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # ADMIN ORDERS MANAGEMENT & WORKFLOW
+  # ==========================================
+
+  /admin/orders:
+    get:
+      operationId: getAdminOrders
+      summary: Danh sách đơn hàng quản trị
+      description: Hiển thị đơn hàng với đầy đủ bộ lọc 6 trạng thái xử lý đơn và 3 trạng thái thu tiền.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: order_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
+        - name: payment_status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+        - name: carrier_name
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Đơn vị vận chuyển (GHN, GHTK, ViettelPost)
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Tìm kiếm theo mã đơn, SĐT hoặc tên khách
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [newest, oldest, total_desc, total_asc]
+            default: newest
+          description: Sắp xếp theo ngày đặt hoặc tổng tiền (trước khi phân trang)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 15
+      responses:
+        '200':
+          description: Danh sách đơn hàng và số lượng theo từng trạng thái
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - orders
+                  - pagination
+                  - counts
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderAdminSummary'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+                  counts:
+                    type: object
+                    required:
+                      - all
+                      - new
+                      - confirmed
+                      - shipping
+                      - completed
+                      - returned
+                      - cancelled
+                    properties:
+                      all:
+                        type: integer
+                        example: 142
+                      new:
+                        type: integer
+                        example: 3
+                      confirmed:
+                        type: integer
+                        example: 5
+                      shipping:
+                        type: integer
+                        example: 8
+                      completed:
+                        type: integer
+                        example: 120
+                      returned:
+                        type: integer
+                        example: 4
+                      cancelled:
+                        type: integer
+                        example: 2
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/orders/{id}:
+    get:
+      operationId: getAdminOrderDetail
+      summary: Chi tiết đơn hàng quản trị
+      description: Hiển thị đầy đủ thông tin khách hàng, các món trong đơn, chi phí ship, thông tin bưu cục và lịch sử thay đổi trạng thái.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Mã đơn hàng (VD "DH-260901")
+      responses:
+        '200':
+          description: Chi tiết đơn hàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAdminDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/orders/{id}/confirm:
+    patch:
+      operationId: confirmAdminOrder
+      summary: Xác nhận đơn và chốt phí ship 1 chiều
+      description: |
+        Đơn cần cọc đi 2 bước: khách gửi ảnh chuyển cọc → shop bấm "Đã nhận cọc" (`PATCH /admin/orders/{id}/deposit`) → shop kiểm tra lần cuối với khách → "Xác nhận đơn" (endpoint này).
+        Đơn không cần cọc chỉ có bước xác nhận. Đơn đã có phí ship lúc đặt (phí mặc định, hoặc 0 khi freeship). Gửi `shipping_fee` để đổi (chọn từ `shipping_fee_presets` hoặc nhập mức khác, ví dụ khu vực đặc biệt); bỏ trống = giữ phí lúc đặt.
+        Chỉ từ `new`. `shipping_fee` là số nguyên ≥ 0 (0 hợp lệ); sai kiểu → 400 `VALIDATION_FAILED`; đơn cũ chưa có phí mà không gửi → 400 `SHIPPING_FEE_REQUIRED`. Sai trạng thái → 409 `INVALID_TRANSITION`.
+        Đơn cần cọc mà chưa nhận cọc → 409 `DEPOSIT_REQUIRED`. Hết giờ giữ thì hệ thống đã tự xử lý (tự xác nhận hoặc tự hủy) → 409 `INVALID_TRANSITION`.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shipping_fee:
+                  type: integer
+                  minimum: 0
+                  description: Phí ship 1 chiều thu khách (VND). Bỏ trống = giữ phí đã chốt lúc đặt.
+                  example: 30000
+                note:
+                  type: string
+                  description: Ghi chú thỏa thuận giao hàng
+                  example: "Khách hẹn giao giờ hành chính tại cơ quan"
+      responses:
+        '200':
+          description: Đã xác nhận đơn và chốt phí ship
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/orders/{id}/fulfill:
+    patch:
+      operationId: fulfillAdminOrder
+      summary: Bước 2 - Bàn giao bưu cục (Giao hàng)
+      description: |
+        Gửi hàng cho bưu cục, nhập mã vận đơn, hãng vận chuyển và cước thực tế phải trả cho đơn vị vận chuyển. Đơn chuyển sang trạng thái `shipping`.
+        Chỉ từ `confirmed`. Đơn COD chuyển `payment_status` sang `pending_cod`. Thiếu dữ liệu → 400 kèm `fields`. Sai trạng thái → 409 `INVALID_TRANSITION`.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - carrier_name
+                - tracking_code
+                - actual_shipping_cost
+              properties:
+                carrier_name:
+                  type: string
+                  description: Tên hãng vận chuyển (VD "Giao Hàng Nhanh", "GHTK", "ViettelPost")
+                  example: "Giao Hàng Nhanh (GHN)"
+                tracking_code:
+                  type: string
+                  description: Mã vận đơn bưu cục
+                  example: "GHN88291039VN"
+                actual_shipping_cost:
+                  type: integer
+                  minimum: 0
+                  description: Cước phí bưu cục thực thu từ shop (VND)
+                  example: 28000
+                note:
+                  type: string
+                  example: "Đã bàn giao bưu cục lúc 16:30"
+      responses:
+        '200':
+          description: Bàn giao bưu cục thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/orders/{id}/status:
+    patch:
+      operationId: updateAdminOrderStatus
+      summary: Bước 3 - Cập nhật trạng thái cuối (Hoàn tất / Trả hàng / Hủy đơn)
+      description: |
+        - `completed`: chỉ từ `shipping`. Chủ shop ghi nhận khách đã nhận hàng, đặt `completed_at` (bắt đầu 2 ngày được trả). Món chuyển `sold`. `payment_status` giữ nguyên (COD vẫn `pending_cod` tới khi đối soát).
+        - `returned`: chỉ từ `completed` và trong 2 ngày kể từ `completed_at`. `refund_amount` = tổng giá món (phí ship không hoàn). Món về `shelf`. Quá hạn → 409 `RETURN_WINDOW_EXPIRED`.
+        - `cancelled`: từ `new`, `confirmed` hoặc `shipping`; `reason` bắt buộc (400 kèm `fields` nếu thiếu). Món về `shelf`.
+        Chuyển sai trạng thái → 409 `INVALID_TRANSITION`.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [completed, returned, cancelled]
+                reason:
+                  type: string
+                  description: Lý do hủy đơn (bắt buộc khi `cancelled`) hoặc ghi chú nhận trả hàng
+                  example: "Khách đổi ý"
+                return_shipping_fee:
+                  type: integer
+                  description: Cước ship chiều về do khách chịu (nếu có), chỉ để ghi nhận
+                  example: 30000
+      responses:
+        '200':
+          description: Cập nhật trạng thái thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/orders/{id}/deposit:
+    patch:
+      operationId: markAdminOrderDepositPaid
+      summary: Ghi nhận đã nhận cọc
+      description: |
+        Chỉ khi `deposit_status` = `pending` và đơn đang `new` hoặc `confirmed`. Chuyển `deposit_status` → `paid`, ghi `deposit_paid_at`.
+        Đơn cần cọc chỉ được giao bưu cục sau khi đã nhận cọc. Sai trạng thái → 409 `INVALID_TRANSITION`.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  example: "Khách chuyển cọc VCB, nội dung COC DH-260922"
+      responses:
+        '200':
+          description: Đã ghi nhận cọc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAdminDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/orders/{id}/hold:
+    patch:
+      operationId: extendAdminOrderHold
+      summary: Gia hạn giữ đơn
+      description: |
+        Chỉ khi đơn còn `new` và chưa hết giờ giữ. Mỗi đơn gia hạn đúng 1 lần: giờ hết mới = giờ hết hiện tại + `minutes`, với 1 ≤ `minutes` < `hold_minutes` của đơn.
+        Đã gia hạn rồi → 409 `HOLD_ALREADY_EXTENDED`. `minutes` thiếu/sai → 400 `VALIDATION_FAILED` (thông báo tiếng Việt theo trường `minutes`).
+        Hết giờ thì hệ thống đã tự xác nhận hoặc tự hủy → 409 `INVALID_TRANSITION`.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - minutes
+              properties:
+                minutes:
+                  type: integer
+                  minimum: 1
+                  description: Số phút cộng thêm, phải nhỏ hơn `hold_minutes` của đơn
+                  example: 15
+      responses:
+        '200':
+          description: Đã gia hạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/orders/{id}/payment:
+    patch:
+      operationId: updateAdminOrderPayment
+      summary: Cập nhật trạng thái thu tiền của đơn
+      description: Chuyển trạng thái thanh toán. Dùng cho "Đã nhận tiền COD" (`pending_cod` → `paid`) và "Đã nhận chuyển khoản" (`unpaid` → `paid`). Chuyển không hợp lệ → 409 `INVALID_TRANSITION`.
+      tags:
+        - Admin Orders
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - payment_status
+              properties:
+                payment_status:
+                  $ref: '#/components/schemas/PaymentStatus'
+                received_amount:
+                  type: integer
+                  description: Số tiền thực nhận vào tài khoản
+                  example: 350000
+                note:
+                  type: string
+                  example: "Khách chuyển khoản VCB kèm mã đơn"
+      responses:
+        '200':
+          description: Cập nhật trạng thái thanh toán thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ==========================================
+  # ADMIN BATCHES (ĐỢT NHẬP / KIỆN HÀNG)
+  # ==========================================
+
+  /admin/batches:
+    get:
+      operationId: getAdminBatches
+      summary: Danh sách tất cả kiện hàng nhập về
+      description: "Hiển thị các chỉ số tài chính từng kiện: Vốn kiện, chi phí giặt ủi xử lý, tổng số món, doanh thu đã gỡ, trạng thái hòa vốn."
+      tags:
+        - Admin Batches
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Danh sách kiện hàng kèm chỉ số tài chính tổng hợp
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - batches
+                  - totals
+                properties:
+                  batches:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BatchSummary'
+                  totals:
+                    type: object
+                    required:
+                      - total_batches
+                      - total_capital_invested
+                      - total_revenue_generated
+                      - total_items_cataloged
+                    properties:
+                      total_batches:
+                        type: integer
+                        example: 6
+                      total_capital_invested:
+                        type: integer
+                        example: 92400000
+                      total_revenue_generated:
+                        type: integer
+                        example: 114800000
+                      total_items_cataloged:
+                        type: integer
+                        example: 312
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      operationId: createAdminBatch
+      summary: Tạo mới một kiện hàng nhập về
+      description: Ghi nhận kiện hàng nguyên đai nguyên kiện hoặc kiện tuyển, vốn nhập và chi phí xử lý ban đầu.
+      tags:
+        - Admin Batches
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBatchRequest'
+      responses:
+        '201':
+          description: Kiện hàng đã được tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSummary'
+        '400':
+          description: Dữ liệu không hợp lệ hoặc trùng mã kiện (`BATCH_CODE_EXISTS`, `fields` chỉ ra `code`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/batches/{id}:
+    get:
+      operationId: getAdminBatchDetail
+      summary: Chi tiết một kiện hàng và danh sách món được bóc tách từ kiện
+      tags:
+        - Admin Batches
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Mã kiện hàng (VD "KN2410")
+      responses:
+        '200':
+          description: Chi tiết kiện hàng kèm danh sách món
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # ADMIN CASH FLOW & COD RECONCILIATION
+  # ==========================================
+
+  /admin/cash-flow/summary:
+    get:
+      operationId: getAdminCashFlowSummary
+      summary: Báo cáo tổng hợp dòng tiền cửa hàng
+      description: |
+        Theo dõi dòng tiền thực tế, đối soát tiền thu hộ COD bưu cục đang giữ, doanh thu bán hàng và chênh lệch phí ship.
+        Mọi số được tính từ dữ liệu đơn, kiện và phiên đối soát; không có số dự phòng cố định. `series` chia theo mốc `period`.
+      tags:
+        - Admin Cash Flow
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: week
+          description: Mốc gộp cho `series` (ngày / tuần / tháng)
+      responses:
+        '200':
+          description: Dữ liệu dòng tiền tổng hợp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/cash-flow/reconciliations:
+    get:
+      operationId: getAdminReconciliations
+      summary: Danh sách các phiên đối soát COD với các đơn vị vận chuyển
+      tags:
+        - Admin Cash Flow
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Danh sách các phiên đối soát
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReconciliationSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      operationId: createAdminReconciliation
+      summary: Khớp và giải ngân phiên đối soát COD vào tài khoản ngân hàng
+      description: Khi hãng vận chuyển chuyển khoản tiền COD (sau khi trừ cước vận chuyển), admin xác nhận phiên để chuyển toàn bộ đơn hàng trong phiên sang trạng thái `paid`. Chỉ nhận đơn COD `pending_cod` đã giao xong (`completed` hoặc `returned`); đơn khác → 409 `INVALID_TRANSITION`. `total_cod_collected` phải bằng tổng `total` các đơn, `net_amount_transferred` = `total_cod_collected` - `carrier_shipping_fee`, nếu lệch → 400 `VALIDATION_FAILED` kèm `fields`. Mã đơn trùng (kể cả khác hoa thường) chỉ tính một lần. Mọi đơn phải cùng một hãng vận chuyển, nếu không → 400 `VALIDATION_FAILED` (field `order_ids`). `transfer_date` không có múi giờ được hiểu theo giờ Việt Nam (+07:00).
+      tags:
+        - Admin Cash Flow
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_code
+                - carrier_name
+                - order_ids
+                - total_cod_collected
+                - carrier_shipping_fee
+                - net_amount_transferred
+                - transfer_date
+              properties:
+                session_code:
+                  type: string
+                  example: "DS-GHN-241022"
+                carrier_name:
+                  type: string
+                  example: "Giao Hàng Nhanh (GHN)"
+                order_ids:
+                  type: array
+                  items:
+                    type: string
+                  example: ["DH-260901", "DH-260899"]
+                total_cod_collected:
+                  type: integer
+                  description: Tổng tiền thu hộ COD từ người nhận (VND)
+                  example: 24500000
+                carrier_shipping_fee:
+                  type: integer
+                  description: Tổng cước vận chuyển hãng trừ trực tiếp (VND)
+                  example: 180000
+                net_amount_transferred:
+                  type: integer
+                  description: Số tiền thực nhận chuyển khoản về tài khoản ngân hàng (VND)
+                  example: 24320000
+                transfer_date:
+                  type: string
+                  description: Ngày/giờ tiền về. Chấp nhận `YYYY-MM-DD` hoặc date-time; thiếu múi giờ thì hiểu là +07:00.
+                  example: "2026-10-02"
+      responses:
+        '201':
+          description: Phiên đối soát đã được giải ngân thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconciliationSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/settings:
+    get:
+      operationId: getAdminShopSettings
+      summary: Xem tham số nghiệp vụ (trang Cài đặt)
+      tags:
+        - Admin Settings
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: Tham số hiện hành, kèm giới hạn hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      operationId: updateAdminShopSettings
+      summary: Sửa tham số nghiệp vụ
+      description: |
+        Gửi một hoặc nhiều trường. Số nguyên không âm; tiền (VND) là bội số của 1.000₫, tối đa 1.000.000₫; hạn trả 1–30 ngày; giữ đơn 5–1440 phút. `policy_version` do server tự tăng, không gửi.
+        Số điện thoại 10–11 chữ số bắt đầu bằng 0; Zalo là số hoặc link zalo.me; số tài khoản 6–20 chữ số; link phải là https.
+        Sai → 400 `VALIDATION_FAILED` với `fields`. Chỉ đơn tạo sau khi lưu dùng giá trị mới; đơn cũ giữ số đã chốt.
+      tags:
+        - Admin Settings
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShopSettingsUpdateRequest'
+      responses:
+        '200':
+          description: Đã lưu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopSettings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+# ==========================================
+# COMPONENTS & SCHEMAS
+# ==========================================
+
+components:
+  securitySchemes:
+    AdminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    CustomerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token phiên khách hàng (trường `token` khi đăng nhập), cho client API và kiểm thử. Web dùng cookie `CustomerSessionCookie`.
+    CustomerSessionCookie:
+      type: apiKey
+      in: cookie
+      name: 2hand_customer_session
+      description: |
+        Phiên khách hàng của web (ADR 006): cookie httpOnly, `SameSite=Lax`, `Secure` ở production, `Path=/`, `Max-Age=34560000` (400 ngày, mức tối đa trình duyệt cho phép).
+        Gia hạn trượt: mỗi lần khách dùng web, cookie được cấp lại thêm 400 ngày. Không có hết hạn theo phiên trình duyệt hay theo thời gian không hoạt động; chỉ hết khi khách bấm Đăng xuất (thiết bị đó), Đăng xuất khỏi mọi thiết bị, đổi mật khẩu (các thiết bị khác) hoặc 400 ngày không vào web.
+
+  responses:
+    Unauthorized:
+      description: Không có quyền truy cập hoặc phiên làm việc hết hạn
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Không tìm thấy tài nguyên yêu cầu
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Yêu cầu không hợp lệ (`fields` chỉ ra ô cần sửa nếu có)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Xung đột trạng thái (ví dụ `INVALID_TRANSITION`, `RETURN_WINDOW_EXPIRED`, `ITEM_IN_ACTIVE_ORDER`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ------------------ ENUMS ------------------
+    ItemCategory:
+      type: string
+      description: |
+        Phân loại chi tiết sản phẩm:
+        - `t_shirts`: Áo thun / Polo
+        - `shirts`: Áo sơ mi
+        - `sweaters`: Áo len
+        - `jackets`: Áo khoác
+        - `blazers`: Blazer / Măng tô
+        - `pants`: Quần dài (Jeans, Kaki, Âu)
+        - `shorts`: Quần short
+        - `skirts`: Chân váy
+        - `dresses`: Đầm
+        - `bags`: Túi xách / Balo
+        - `scarves`: Khăn
+        - `hats`: Mũ / Nón
+        - `accessories`: Phụ kiện khác
+      enum:
+        - t_shirts
+        - shirts
+        - sweaters
+        - jackets
+        - blazers
+        - pants
+        - shorts
+        - skirts
+        - dresses
+        - bags
+        - scarves
+        - hats
+        - accessories
+
+    ItemCondition:
+      type: string
+      description: |
+        5 Cấp độ tình trạng chuẩn hóa:
+        - `new`: Mới (Chưa qua sử dụng, còn tem mác nguyên bản)
+        - `like_new`: Như mới (Gần như mới, phom dáng và chất vải nguyên vẹn)
+        - `good`: Tốt (Đã qua sử dụng nhưng giữ gìn rất tốt)
+        - `fair`: Đã qua sử dụng (Có độ mòn thời gian tự nhiên, không rách hỏng lớn)
+        - `attention_required`: Cần lưu ý (Có khuyết điểm, vết ố, sờn chỉ - có ảnh chụp cận cảnh và mô tả)
+      enum: [new, like_new, good, fair, attention_required]
+
+    ItemStatus:
+      type: string
+      description: |
+        Vòng đời trạng thái món đồ:
+        - `draft`: Bản nháp (Đang xử lý đo đạc/chụp ảnh, chưa lên kệ)
+        - `shelf`: Đang trên kệ (Khách có thể xem và đặt mua)
+        - `reserved`: Đang giữ chỗ (Đã nằm trong đơn hàng chờ xử lý)
+        - `sold`: Đã bán (Đơn hàng đã hoàn tất)
+        (`archived` đã bỏ theo ADR 003 D4.)
+      enum: [draft, shelf, reserved, sold]
+
+    OrderStatus:
+      type: string
+      description: |
+        6 Trạng thái quy trình đơn hàng:
+        - `new`: Đơn mới tạo từ website
+        - `confirmed`: Đã xác nhận & chốt phí ship với khách
+        - `shipping`: Đã bàn giao bưu cục kèm mã vận đơn
+        - `completed`: Giao thành công cho khách
+        - `returned`: Khách trả hàng trong 2 ngày kể từ hoàn tất (chỉ trả, không đổi)
+        - `cancelled`: Đơn bị hủy
+      enum: [new, confirmed, shipping, completed, returned, cancelled]
+
+    PaymentMethod:
+      type: string
+      enum: [cod, bank_transfer]
+
+    PaymentStatus:
+      type: string
+      description: |
+        3 Trạng thái thanh toán:
+        - `unpaid`: Chưa thanh toán
+        - `pending_cod`: Chờ đối soát tiền thu hộ COD từ bưu cục
+        - `paid`: Đã nhận tiền vào tài khoản
+      enum: [unpaid, pending_cod, paid]
+
+    DepositStatus:
+      type: string
+      description: |
+        Cọc cho đơn đầu tiên của một số điện thoại (ADR 004; số tiền theo cài đặt, ADR 005):
+        - `not_required`: Không cần cọc (số điện thoại đã có đơn hoàn tất)
+        - `pending`: Chờ khách chuyển cọc (shop chưa giao bưu cục)
+        - `paid`: Shop đã nhận cọc
+        - `applied`: Đơn hoàn tất, cọc đã trừ vào tiền đơn
+        - `forfeited`: Khách mất cọc (trả hàng, hoặc khách tự hủy sau khi shop đã xác nhận đơn)
+        - `refunded`: Đơn hủy, shop hoàn cọc (shop hủy, hoặc khách hủy trước khi shop xác nhận)
+        - `voided`: Đơn hủy khi chưa nhận cọc (không có gì để hoàn)
+      enum: [not_required, pending, paid, applied, forfeited, refunded, voided]
+
+    CancelActor:
+      type: string
+      nullable: true
+      description: |
+        Ai hủy đơn (null nếu đơn chưa hủy):
+        - `customer`: Khách tự hủy trên web (trước xác nhận → hoàn cọc; sau xác nhận → mất cọc)
+        - `shop`: Shop hủy (luôn hoàn cọc đã nhận)
+        - `system`: Hết giờ giữ mà đơn cần cọc chưa nhận cọc
+      enum: [customer, shop, system, null]
+
+    ConfirmActor:
+      type: string
+      nullable: true
+      description: |
+        Ai xác nhận đơn (null nếu chưa xác nhận):
+        - `shop`: Shop bấm "Xác nhận đơn"
+        - `system`: Tự động xác nhận khi hết giờ giữ (đơn không cần cọc hoặc đã nhận cọc), phí ship = phí đã chốt trên đơn lúc đặt (`shipping_fee`)
+      enum: [shop, system, null]
+
+    BatchStatus:
+      type: string
+      enum: [processing, active, break_even, completed]
+
+    # ------------------ OBJECT MODELS ------------------
+    ItemMeasurements:
+      type: object
+      description: Thông số đo đạc thủ công chính xác theo centimet
+      properties:
+        shoulder_cm:
+          type: number
+          description: Rộng vai (cm)
+          example: 44.5
+        chest_cm:
+          type: number
+          description: Ngực / Vòng 1 (cm)
+          example: 52
+        length_cm:
+          type: number
+          description: Dài áo hoặc dài quần (cm)
+          example: 71
+        sleeve_cm:
+          type: number
+          description: Dài tay áo (cm)
+          example: 60
+        waist_cm:
+          type: number
+          description: Vòng eo / Cạp quần (cm)
+          example: 38
+        leg_opening_cm:
+          type: number
+          description: Rộng ống quần (cm)
+          example: 21
+
+    ItemImage:
+      type: object
+      description: Một ảnh của món kèm chữ thay thế (alt) bắt buộc khi lên kệ (ADR 003 D11).
+      required:
+        - url
+        - alt
+      properties:
+        url:
+          type: string
+          example: "https://images.unsplash.com/photo-1598033129183-c4f50c736f10"
+        alt:
+          type: string
+          example: "Áo sơ mi lụa, mặt trước"
+
+    ItemPublicSummary:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - condition
+        - price
+        - size
+        - main_image
+        - status
+      properties:
+        id:
+          type: string
+          example: "KN2410-001"
+        name:
+          type: string
+          example: "Áo sơ mi lụa tơ tằm cổ điển 1990s"
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        condition:
+          $ref: '#/components/schemas/ItemCondition'
+        price:
+          type: integer
+          example: 320000
+        size:
+          type: string
+          example: "M (Form suông)"
+        main_image:
+          type: string
+          description: URL ảnh chính (bằng `images[0].url`)
+          example: "https://images.unsplash.com/photo-1598033129183-c4f50c736f10"
+        status:
+          $ref: '#/components/schemas/ItemStatus'
+        batch_id:
+          type: string
+          example: "KN2410"
+
+    ItemPublicDetail:
+      allOf:
+        - $ref: '#/components/schemas/ItemPublicSummary'
+        - type: object
+          required:
+            - material
+            - measurements
+            - images
+          properties:
+            material:
+              type: string
+              example: "100% Lụa Mulberry tự nhiên"
+            origin:
+              type: string
+              example: "Nhật Bản tuyển chọn"
+            measurements:
+              $ref: '#/components/schemas/ItemMeasurements'
+            images:
+              type: array
+              items:
+                $ref: '#/components/schemas/ItemImage'
+            defect_description:
+              type: string
+              nullable: true
+              example: "Có một vết ố mờ nhỏ 2mm ở gấu áo phía sau bên phải, khó nhận thấy khi mặc."
+            defect_images:
+              type: array
+              items:
+                $ref: '#/components/schemas/ItemImage'
+
+    ItemAdminSummary:
+      allOf:
+        - $ref: '#/components/schemas/ItemPublicSummary'
+        - type: object
+          required:
+            - batch_id
+            - created_at
+          properties:
+            batch_id:
+              type: string
+              example: "KN2410"
+            created_at:
+              type: string
+              format: date-time
+
+    ItemAdminDetail:
+      allOf:
+        - $ref: '#/components/schemas/ItemPublicDetail'
+        - type: object
+          required:
+            - batch_id
+            - status
+            - created_at
+            - updated_at
+            - cost_price
+          properties:
+            batch_id:
+              type: string
+              example: "KN2410"
+            cost_price:
+              type: integer
+              nullable: true
+              description: Giá vốn của món (VND). `null` khi tính theo kiện (ADR 002).
+              example: 120000
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    ItemUpsertRequest:
+      type: object
+      required:
+        - name
+        - batch_id
+        - category
+        - condition
+        - price
+        - size
+        - material
+        - measurements
+        - images
+        - status
+      properties:
+        name:
+          type: string
+          example: "Áo sơ mi lụa tơ tằm cổ điển"
+        batch_id:
+          type: string
+          example: "KN2410"
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        condition:
+          $ref: '#/components/schemas/ItemCondition'
+        price:
+          type: integer
+          minimum: 0
+          example: 320000
+        cost_price:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Giá vốn (VND). Bỏ trống nếu tính theo kiện.
+          example: 120000
+        size:
+          type: string
+          example: "M"
+        material:
+          type: string
+          example: "100% Lụa Mulberry"
+        origin:
+          type: string
+          example: "Nhật Bản"
+        measurements:
+          $ref: '#/components/schemas/ItemMeasurements'
+        images:
+          type: array
+          description: Ảnh theo thứ tự hiển thị, ảnh đầu là ảnh chính. Lên kệ cần ≥1 ảnh có `alt`. Nháp có thể rỗng.
+          items:
+            $ref: '#/components/schemas/ItemImage'
+        defect_description:
+          type: string
+          nullable: true
+          description: Bắt buộc nếu condition là attention_required
+        defect_images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemImage'
+          description: Bắt buộc (≥1) nếu condition là attention_required
+        status:
+          type: string
+          enum: [draft, shelf]
+          description: Lưu nháp (`draft`) hoặc lưu và lên kệ (`shelf`)
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - customer_name
+        - customer_phone
+        - shipping_address
+        - payment_method
+        - item_ids
+        - policy_accepted
+        - policy_version
+      properties:
+        customer_name:
+          type: string
+          example: "Nguyễn Văn An"
+        customer_phone:
+          type: string
+          example: "0912345678"
+        shipping_address:
+          type: string
+          example: "Số 48 Tràng Tiền, Hoàn Kiếm, Hà Nội"
+        customer_note:
+          type: string
+          example: "Gọi trước khi giao 30 phút"
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        item_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          example: ["KN2410-001", "KN2410-004"]
+        policy_accepted:
+          type: boolean
+          description: Khách đã tick "Tôi đã đọc và đồng ý với chính sách đặt cọc & hoàn hàng". Thiếu hoặc false → 400 `POLICY_NOT_ACCEPTED`.
+          example: true
+        policy_version:
+          type: integer
+          description: Phiên bản chính sách khách đã đọc (`policy_version` từ `GET /settings`). Cũ hơn bản hiện hành → 400 `POLICY_VERSION_OUTDATED`.
+          example: 1
+        policy_accepted_at:
+          type: string
+          format: date-time
+          description: Giờ khách tick đồng ý theo máy khách (tham khảo). Server lưu giờ nhận đơn của chính nó vào `policy_accepted_at` của đơn.
+
+    PublicShopSettings:
+      type: object
+      description: |
+        Tham số nghiệp vụ hiện hành và thông tin liên hệ / nhận cọc của shop (ADR 005). Mặc định 50.000₫ / 50.000₫ / 2 ngày.
+        Thông tin ngân hàng là công khai vì khách cần để chuyển cọc. Nội dung chuyển khoản luôn là số điện thoại của khách.
+      required:
+        - deposit_amount
+        - return_fee
+        - return_window_days
+        - order_hold_minutes
+        - policy_version
+        - shop_phone
+        - shop_zalo
+        - shop_messenger_url
+        - bank_name
+        - bank_account_number
+        - bank_account_holder
+        - bank_qr_image_url
+        - shipping_fee_presets
+        - default_shipping_fee
+        - freeship_min_items
+      properties:
+        deposit_amount:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          description: Tiền cọc cho đơn đầu tiên của một số điện thoại (VND). 0 = không thu cọc.
+          example: 50000
+        return_fee:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          description: Phí ship 2 chiều khách chịu khi trả đơn không có cọc (VND). 0 = miễn phí.
+          example: 50000
+        return_window_days:
+          type: integer
+          minimum: 1
+          maximum: 30
+          description: Số ngày được trả kể từ lúc đơn hoàn tất
+          example: 2
+        order_hold_minutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          description: Số phút giữ đơn mới để shop kiểm tra (khách chuyển cọc nếu cần). Hết giờ mà shop chưa xử lý → đơn cần cọc chưa nhận cọc thì tự hủy, món về kệ; đơn không cần cọc hoặc đã nhận cọc thì tự động xác nhận. Mỗi đơn gia hạn được 1 lần, ít hơn số phút này.
+          example: 30
+        policy_version:
+          type: integer
+          minimum: 1
+          description: Phiên bản chính sách cọc & hoàn hàng. Tự tăng khi đổi tiền cọc, phí trả hàng, hạn trả, thời gian giữ đơn, phí ship mặc định hoặc ngưỡng freeship (các số khách thấy ở bước chính sách và tổng tiền). Checkout gửi kèm khi khách đồng ý.
+          example: 1
+        shop_phone:
+          type: string
+          pattern: '^0[0-9]{9,10}$'
+          description: Số điện thoại shop (gọi). Chỉ chữ số.
+          example: "0900000000"
+        shop_zalo:
+          type: string
+          description: Số Zalo (chỉ chữ số) hoặc link `https://zalo.me/…`
+          example: "0900000000"
+        shop_messenger_url:
+          type: string
+          nullable: true
+          description: Link Facebook/Messenger (không bắt buộc)
+          example: null
+        bank_name:
+          type: string
+          example: "Vietcombank"
+        bank_account_number:
+          type: string
+          pattern: '^[0-9]{6,20}$'
+          example: "0000000000"
+        bank_account_holder:
+          type: string
+          description: Tên chủ tài khoản (in hoa)
+          example: "CHU SHOP"
+        bank_qr_image_url:
+          type: string
+          nullable: true
+          description: Link ảnh mã QR chuyển khoản (không bắt buộc)
+          example: null
+        shipping_fee_presets:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          description: |
+            Các mức phí ship 1 chiều shop hay dùng (VND, theo thứ tự shop sắp) để đổi phí của một đơn khi xác nhận (khu vực đặc biệt), hoặc nhập mức khác.
+            Đổi danh sách không tăng `policy_version` và không đổi đơn cũ.
+          items:
+            type: integer
+            minimum: 0
+            maximum: 1000000
+            multipleOf: 1000
+          example: [20000, 30000]
+        default_shipping_fee:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          multipleOf: 1000
+          description: |
+            Phí ship 1 chiều mặc định (VND): shop đồng giá với hãng vận chuyển cho hầu hết khu vực. Checkout tính tổng chính xác = tiền món + phí này − cọc.
+            Đơn mới chốt phí này (`shipping_fee`, `default_shipping_fee`); tự xác nhận dùng phí đã chốt trên đơn. Đổi giá trị tăng `policy_version`.
+          example: 30000
+        freeship_min_items:
+          type: integer
+          minimum: 0
+          maximum: 50
+          description: Đơn có từ N món trở lên được miễn phí ship (phí ship = 0). 0 = tắt freeship. Đổi giá trị tăng `policy_version`.
+          example: 4
+
+    ShopSettings:
+      allOf:
+        - $ref: '#/components/schemas/PublicShopSettings'
+        - type: object
+          required:
+            - updated_at
+          properties:
+            updated_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: Lần lưu gần nhất (null = đang dùng mặc định)
+
+    ShopSettingsUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        deposit_amount:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          multipleOf: 1000
+          example: 30000
+        return_fee:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          multipleOf: 1000
+          example: 50000
+        return_window_days:
+          type: integer
+          minimum: 1
+          maximum: 30
+          example: 2
+        order_hold_minutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          example: 30
+        shop_phone:
+          type: string
+          example: "0900000000"
+        shop_zalo:
+          type: string
+          example: "https://zalo.me/0900000000"
+        shop_messenger_url:
+          type: string
+          nullable: true
+          description: Gửi `null` hoặc chuỗi rỗng để bỏ
+        bank_name:
+          type: string
+          example: "Vietcombank"
+        bank_account_number:
+          type: string
+          example: "0000000000"
+        bank_account_holder:
+          type: string
+          example: "CHU SHOP"
+        bank_qr_image_url:
+          type: string
+          nullable: true
+          description: Gửi `null` hoặc chuỗi rỗng để bỏ
+        shipping_fee_presets:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          description: Thay cả danh sách (thứ tự giữ nguyên). 1–10 mức, mỗi mức 0–1.000.000₫, bội số 1.000₫, không trùng.
+          items:
+            type: integer
+            minimum: 0
+            maximum: 1000000
+            multipleOf: 1000
+          example: [20000, 30000, 45000]
+        default_shipping_fee:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          multipleOf: 1000
+          description: Phí ship 1 chiều mặc định (VND), bội số 1.000₫
+          example: 30000
+        freeship_min_items:
+          type: integer
+          minimum: 0
+          maximum: 50
+          description: Freeship từ N món (0 = tắt)
+          example: 4
+
+    CustomerCancelRequest:
+      type: object
+      required:
+        - phone
+        - reason
+      properties:
+        phone:
+          type: string
+          description: Số điện thoại đặt hàng (khớp với đơn)
+          example: "0901234567"
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 300
+          description: Lý do hủy (bắt buộc, 3–300 ký tự)
+          example: "Đặt nhầm size"
+        expected_status:
+          allOf:
+            - $ref: '#/components/schemas/OrderStatus'
+          description: Trạng thái đơn khách đang thấy. Khác trạng thái hiện tại (VD đơn vừa tự động xác nhận) → 409 `ORDER_STATUS_CHANGED`, để khách không mất cọc ngoài ý muốn.
+
+    DepositCheckResponse:
+      type: object
+      required:
+        - deposit_required
+        - deposit_amount
+        - return_fee
+      properties:
+        deposit_required:
+          type: boolean
+          description: true nếu số điện thoại chưa có đơn hoàn tất (đơn này phải cọc)
+        deposit_amount:
+          type: integer
+          description: Tiền cọc phải chuyển (0 nếu không cần)
+          example: 50000
+        return_fee:
+          type: integer
+          description: Phí ship 2 chiều khách chịu khi trả hàng nếu đơn không có cọc (đơn có cọc thì mất cọc thay cho phí này)
+          example: 50000
+
+    OrderConfirmationResponse:
+      type: object
+      required:
+        - default_shipping_fee
+        - freeship_applied
+        - deposit_status
+        - deposit_amount
+        - hold_expires_at
+        - agreed_return_fee
+        - return_window_days
+        - amount_due
+        - order_code
+        - customer_name
+        - customer_phone
+        - shipping_address
+        - payment_method
+        - payment_status
+        - order_status
+        - subtotal
+        - items
+        - created_at
+      properties:
+        default_shipping_fee:
+          type: integer
+          nullable: true
+          description: Phí ship mặc định (1 chiều) lấy từ cài đặt `default_shipping_fee` lúc đặt đơn, trước khi tính freeship. null với đơn tạo trước khi có phí mặc định.
+          example: 30000
+        freeship_applied:
+          type: boolean
+          description: Đơn đủ số món để freeship (cài đặt `freeship_min_items`, chốt lúc đặt) nên `shipping_fee` lúc đặt = 0. Shop vẫn đổi được phí khi xác nhận (khu vực đặc biệt); UI admin cảnh báo khi đổi.
+          example: false
+        order_code:
+          type: string
+          example: "DH-260901"
+        customer_name:
+          type: string
+          example: "Nguyễn Văn An"
+        customer_phone:
+          type: string
+          example: "0912345678"
+        shipping_address:
+          type: string
+          example: "Số 48 Tràng Tiền, Hoàn Kiếm, Hà Nội"
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        order_status:
+          $ref: '#/components/schemas/OrderStatus'
+        subtotal:
+          type: integer
+          description: Tổng tiền các món đồ (VND)
+          example: 770000
+        shipping_fee:
+          type: integer
+          nullable: true
+          description: Phí ship 1 chiều của đơn. Lúc đặt = phí ship mặc định của shop (hoặc 0 khi freeship); shop có thể đổi khi xác nhận. null chỉ với đơn cũ chưa chốt phí.
+          example: 30000
+        total:
+          type: integer
+          description: Tiền món + phí ship 1 chiều (VND)
+          example: 800000
+        deposit_status:
+          $ref: '#/components/schemas/DepositStatus'
+        deposit_amount:
+          type: integer
+          description: Tiền cọc của đơn, chốt theo cài đặt lúc tạo đơn (mặc định 50.000₫ với số điện thoại chưa có đơn hoàn tất, 0 nếu không cần cọc)
+          example: 50000
+        amount_due:
+          type: integer
+          description: Số tiền khách còn phải trả cho đơn = `total` − tiền cọc đã nhận (cọc đã chuyển được trừ vào đơn)
+          example: 750000
+        agreed_return_fee:
+          type: integer
+          description: Phí ship 2 chiều khách chịu nếu trả đơn không có cọc, chốt theo cài đặt lúc tạo đơn (ADR 005). Đổi cài đặt sau đó không đổi đơn cũ.
+          example: 50000
+        return_window_days:
+          type: integer
+          description: Số ngày được trả kể từ lúc hoàn tất, chốt theo cài đặt lúc tạo đơn (ADR 005)
+          example: 2
+        hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Hết giờ giữ đơn (đơn `new`). Hết giờ mà shop chưa xử lý → đơn cần cọc chưa nhận cọc thì tự hủy (món về kệ); đơn không cần cọc hoặc đã nhận cọc thì tự động xác nhận. Chỉ có ý nghĩa khi đơn còn `new`.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemPublicSummary'
+        created_at:
+          type: string
+          format: date-time
+
+    OrderTrackingDetail:
+      type: object
+      required:
+        - default_shipping_fee
+        - freeship_applied
+        - cancel_reason
+        - cancelled_by
+        - confirmed_by
+        - hold_minutes
+        - deposit_status
+        - deposit_amount
+        - hold_expires_at
+        - agreed_return_fee
+        - return_window_days
+        - amount_due
+        - order_code
+        - order_status
+        - payment_status
+        - payment_method
+        - customer_name
+        - customer_phone
+        - shipping_address
+        - subtotal
+        - total
+        - items
+        - timeline
+        - created_at
+      properties:
+        default_shipping_fee:
+          type: integer
+          nullable: true
+          description: Phí ship mặc định (1 chiều) lấy từ cài đặt `default_shipping_fee` lúc đặt đơn, trước khi tính freeship. null với đơn tạo trước khi có phí mặc định.
+          example: 30000
+        freeship_applied:
+          type: boolean
+          description: Đơn đủ số món để freeship (cài đặt `freeship_min_items`, chốt lúc đặt) nên `shipping_fee` lúc đặt = 0. Shop vẫn đổi được phí khi xác nhận (khu vực đặc biệt); UI admin cảnh báo khi đổi.
+          example: false
+        order_code:
+          type: string
+          example: "DH-260901"
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Lúc chủ shop ghi nhận hoàn tất (bắt đầu 2 ngày được trả)
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancel_reason:
+          type: string
+          nullable: true
+          example: "Đổi ý, không mua nữa"
+        cancelled_by:
+          $ref: '#/components/schemas/CancelActor'
+        confirmed_by:
+          $ref: '#/components/schemas/ConfirmActor'
+        hold_minutes:
+          type: integer
+          description: Số phút giữ đơn chốt lúc tạo đơn
+          example: 30
+        returned_at:
+          type: string
+          format: date-time
+          nullable: true
+        return_deadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: Hạn cuối báo trả = `completed_at` + `return_window_days` ngày. `null` nếu đơn chưa hoàn tất.
+        refund_amount:
+          type: integer
+          nullable: true
+          description: Tiền hoàn cho khách. Trả hàng = giá món − (tiền cọc bị mất hoặc `agreed_return_fee`). Hủy đơn = cọc đã nhận nếu shop hủy hoặc khách hủy trước khi shop xác nhận; khách hủy sau khi đã xác nhận thì mất cọc (0).
+        return_fee:
+          type: integer
+          nullable: true
+          description: Phí ship 2 chiều đã thu khi trả đơn không có cọc (= `agreed_return_fee`, trừ vào tiền hoàn)
+        deposit_status:
+          $ref: '#/components/schemas/DepositStatus'
+        deposit_amount:
+          type: integer
+          description: Tiền cọc của đơn, chốt theo cài đặt lúc tạo đơn (mặc định 50.000₫ với số điện thoại chưa có đơn hoàn tất, 0 nếu không cần cọc)
+          example: 50000
+        amount_due:
+          type: integer
+          description: Số tiền khách còn phải trả cho đơn = `total` − tiền cọc đã nhận (cọc đã chuyển được trừ vào đơn)
+          example: 750000
+        agreed_return_fee:
+          type: integer
+          description: Phí ship 2 chiều khách chịu nếu trả đơn không có cọc, chốt theo cài đặt lúc tạo đơn (ADR 005). Đổi cài đặt sau đó không đổi đơn cũ.
+          example: 50000
+        return_window_days:
+          type: integer
+          description: Số ngày được trả kể từ lúc hoàn tất, chốt theo cài đặt lúc tạo đơn (ADR 005)
+          example: 2
+        hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Hết giờ giữ đơn (đơn `new`). Hết giờ mà shop chưa xử lý → đơn cần cọc chưa nhận cọc thì tự hủy (món về kệ); đơn không cần cọc hoặc đã nhận cọc thì tự động xác nhận. Chỉ có ý nghĩa khi đơn còn `new`.
+        order_status:
+          $ref: '#/components/schemas/OrderStatus'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        customer_name:
+          type: string
+          example: "Nguyễn Văn An"
+        customer_phone:
+          type: string
+          example: "0912345678"
+        shipping_address:
+          type: string
+          example: "Số 48 Tràng Tiền, Hoàn Kiếm, Hà Nội"
+        tracking_code:
+          type: string
+          nullable: true
+          example: "GHN88291039VN"
+        carrier_name:
+          type: string
+          nullable: true
+          example: "Giao Hàng Nhanh (GHN)"
+        shipping_fee:
+          type: integer
+          nullable: true
+          example: 30000
+        subtotal:
+          type: integer
+          example: 770000
+        total:
+          type: integer
+          example: 800000
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemPublicSummary'
+        timeline:
+          type: array
+          items:
+            type: object
+            required:
+              - stage
+              - timestamp
+              - description
+            properties:
+              stage:
+                type: string
+                example: "Đặt đơn thành công"
+              timestamp:
+                type: string
+                format: date-time
+              description:
+                type: string
+                example: "Đơn hàng đã được tiếp nhận, chờ shop liên hệ chốt ship."
+
+    OrderAdminSummary:
+      type: object
+      required:
+        - default_shipping_fee
+        - freeship_applied
+        - deposit_status
+        - deposit_amount
+        - hold_expires_at
+        - amount_due
+        - id
+        - order_code
+        - customer_name
+        - customer_phone
+        - total_items
+        - subtotal
+        - payment_method
+        - order_status
+        - payment_status
+        - created_at
+      properties:
+        default_shipping_fee:
+          type: integer
+          nullable: true
+          description: Phí ship mặc định (1 chiều) lấy từ cài đặt `default_shipping_fee` lúc đặt đơn, trước khi tính freeship. null với đơn tạo trước khi có phí mặc định.
+          example: 30000
+        freeship_applied:
+          type: boolean
+          description: Đơn đủ số món để freeship (cài đặt `freeship_min_items`, chốt lúc đặt) nên `shipping_fee` lúc đặt = 0. Shop vẫn đổi được phí khi xác nhận (khu vực đặc biệt); UI admin cảnh báo khi đổi.
+          example: false
+        id:
+          type: string
+          example: "order_123"
+        order_code:
+          type: string
+          example: "DH-260901"
+        customer_name:
+          type: string
+          example: "Nguyễn Văn An"
+        customer_phone:
+          type: string
+          example: "0912345678"
+        total_items:
+          type: integer
+          example: 2
+        subtotal:
+          type: integer
+          example: 770000
+        shipping_fee:
+          type: integer
+          nullable: true
+          example: 30000
+        total:
+          type: integer
+          example: 800000
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        order_status:
+          $ref: '#/components/schemas/OrderStatus'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        carrier_name:
+          type: string
+          nullable: true
+          example: "GHN"
+        deposit_status:
+          $ref: '#/components/schemas/DepositStatus'
+        deposit_amount:
+          type: integer
+          description: Tiền cọc của đơn, chốt theo cài đặt lúc tạo đơn (mặc định 50.000₫ với số điện thoại chưa có đơn hoàn tất, 0 nếu không cần cọc)
+          example: 50000
+        amount_due:
+          type: integer
+          description: Số tiền khách còn phải trả cho đơn = `total` − tiền cọc đã nhận (cọc đã chuyển được trừ vào đơn)
+          example: 750000
+        hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Hết giờ giữ đơn (đơn `new`). Hết giờ mà shop chưa xử lý → đơn cần cọc chưa nhận cọc thì tự hủy (món về kệ); đơn không cần cọc hoặc đã nhận cọc thì tự động xác nhận. Chỉ có ý nghĩa khi đơn còn `new`.
+        tracking_code:
+          type: string
+          nullable: true
+          example: "GHN88291039VN"
+        created_at:
+          type: string
+          format: date-time
+
+    OrderAdminDetail:
+      allOf:
+        - $ref: '#/components/schemas/OrderAdminSummary'
+        - type: object
+          required:
+            - shipping_address
+            - items
+            - timeline
+            - completed_at
+            - cancelled_at
+            - returned_at
+            - refund_amount
+            - return_fee
+            - agreed_return_fee
+            - return_window_days
+            - hold_minutes
+            - hold_extended_at
+            - hold_extension_minutes
+            - cancelled_by
+            - confirmed_by
+            - policy_accepted_at
+            - policy_version
+            - deposit_paid_at
+            - shipped_at
+            - paid_at
+          properties:
+            customer_id:
+              type: string
+              nullable: true
+              description: Mã khách nếu đơn được đặt khi đã đăng nhập
+              example: "KH-1001"
+            shipping_address:
+              type: string
+              example: "Số 48 Tràng Tiền, Hoàn Kiếm, Hà Nội"
+            customer_note:
+              type: string
+              nullable: true
+              example: "Giao giờ hành chính"
+            admin_note:
+              type: string
+              nullable: true
+              example: "Đã gọi điện chốt ship 30k"
+            actual_shipping_cost:
+              type: integer
+              nullable: true
+              description: Cước thực tế trả bưu cục
+              example: 28000
+            shipping_margin:
+              type: integer
+              nullable: true
+              description: Chênh lệch cước = phí ship thu khách - cước thực trả bưu cục. Dương là dư cước, âm là bù cước.
+              example: 2000
+            shipped_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: Lúc bàn giao bưu cục (cước thực tế được chi tại mốc này)
+            paid_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: Lúc tiền về tài khoản shop (chuyển khoản khớp hoặc COD đối soát xong)
+            completed_at:
+              type: string
+              format: date-time
+              nullable: true
+            cancelled_at:
+              type: string
+              format: date-time
+              nullable: true
+            returned_at:
+              type: string
+              format: date-time
+              nullable: true
+            refund_amount:
+              type: integer
+              nullable: true
+              description: |
+                Tiền hoàn cho khách (ADR 004/005). Trả hàng: `subtotal` − (tiền cọc nếu đơn có cọc, nếu không thì `agreed_return_fee`), tối thiểu 0.
+                Hủy đơn: shop hủy (bất kỳ lúc nào) hoặc khách hủy trước khi shop xác nhận → hoàn cọc đã nhận. Khách hủy sau khi đơn đã xác nhận → mất cọc (`deposit_status` = `forfeited`).
+                Đơn đã thu đủ tiền bị hủy: `subtotal` (trừ cọc nếu cọc bị mất), phí ship không hoàn.
+            return_fee:
+              type: integer
+              nullable: true
+              description: Phí ship 2 chiều đã thu khi trả đơn không có cọc (= `agreed_return_fee`, trừ vào tiền hoàn). `null` nếu không áp dụng.
+            agreed_return_fee:
+              type: integer
+              description: Phí ship 2 chiều khách chịu nếu trả đơn không có cọc, chốt theo cài đặt lúc tạo đơn (ADR 005)
+              example: 50000
+            return_window_days:
+              type: integer
+              description: Số ngày được trả kể từ lúc hoàn tất, chốt theo cài đặt lúc tạo đơn (ADR 005)
+              example: 2
+            hold_minutes:
+              type: integer
+              description: Số phút giữ đơn chốt lúc tạo đơn (ADR 005)
+              example: 30
+            policy_accepted_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: Lúc khách đồng ý chính sách đặt cọc & hoàn hàng (giờ server nhận đơn). null với đơn cũ trước khi có bước đồng ý.
+            policy_version:
+              type: integer
+              nullable: true
+              description: Phiên bản chính sách khách đã đồng ý
+              example: 1
+            deposit_paid_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: Lúc shop nhận cọc (tính vào tiền thực về tại mốc này)
+            cancel_reason:
+              type: string
+              nullable: true
+              example: "Khách đổi ý"
+            cancelled_by:
+              $ref: '#/components/schemas/CancelActor'
+            confirmed_by:
+              $ref: '#/components/schemas/ConfirmActor'
+            hold_extended_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: Lúc shop gia hạn giữ đơn (mỗi đơn 1 lần). null = chưa gia hạn.
+            hold_extension_minutes:
+              type: integer
+              nullable: true
+              description: Số phút đã gia hạn (nhỏ hơn `hold_minutes`)
+              example: 15
+            items:
+              type: array
+              description: Món trong đơn. Tên, ảnh và giá là bản chụp lúc đặt (sửa món sau đó không đổi đơn cũ); `status` là trạng thái hiện tại của món.
+              items:
+                $ref: '#/components/schemas/ItemAdminSummary'
+            timeline:
+              type: array
+              items:
+                type: object
+                required:
+                  - action
+                  - actor
+                  - timestamp
+                properties:
+                  action:
+                    type: string
+                    example: "Chốt phí vận chuyển 30.000₫"
+                  actor:
+                    type: string
+                    example: "Chủ shop"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+    BatchSummary:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - category
+        - import_date
+        - initial_capital
+        - processing_cost
+        - total_investment
+        - total_items_count
+        - sold_items_count
+        - total_revenue
+        - break_even_target
+        - is_broken_even
+        - status
+      properties:
+        id:
+          type: string
+          example: "batch_1"
+        code:
+          type: string
+          example: "KN2410"
+        name:
+          type: string
+          example: "Kiện Áo Khoác & Len Thu Đông Tuyển Chọn"
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        import_date:
+          type: string
+          format: date
+          example: "2024-10-15"
+        initial_capital:
+          type: integer
+          description: Vốn nhập kiện ban đầu (VND)
+          example: 18000000
+        processing_cost:
+          type: integer
+          description: Chi phí giặt là, bảo dưỡng xử lý lỗi (VND)
+          example: 1200000
+        total_investment:
+          type: integer
+          description: Tổng vốn đầu tư = Vốn nhập + Chi phí xử lý (VND)
+          example: 19200000
+        total_items_count:
+          type: integer
+          description: Tổng số món bóc tách từ kiện
+          example: 45
+        sold_items_count:
+          type: integer
+          description: Số món đã bán
+          example: 32
+        total_revenue:
+          type: integer
+          description: Doanh thu thực tế đã bán (VND)
+          example: 26800000
+        break_even_target:
+          type: integer
+          description: Cột mốc hoàn vốn an toàn (thường là 130% vốn đầu tư)
+          example: 24960000
+        is_broken_even:
+          type: boolean
+          example: true
+        status:
+          $ref: '#/components/schemas/BatchStatus'
+
+    CreateBatchRequest:
+      type: object
+      required:
+        - code
+        - name
+        - category
+        - import_date
+        - initial_capital
+        - processing_cost
+      properties:
+        code:
+          type: string
+          example: "KN2411"
+        name:
+          type: string
+          example: "Kiện Sơ Mi Vintage Nhật Bản"
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        import_date:
+          type: string
+          format: date
+          example: "2024-11-01"
+        initial_capital:
+          type: integer
+          minimum: 0
+          example: 15000000
+        processing_cost:
+          type: integer
+          minimum: 0
+          example: 800000
+
+    BatchDetail:
+      allOf:
+        - $ref: '#/components/schemas/BatchSummary'
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ItemAdminSummary'
+
+    CashFlowSummary:
+      type: object
+      required:
+        - total_revenue
+        - cod_pending_balance
+        - bank_balance_received
+        - shipping_fee_collected
+        - shipping_cost_paid
+        - net_shipping_margin
+        - refunds_paid
+        - batch_capital_spent
+        - net_cash_flow
+        - deposits_received
+        - return_charges
+        - period
+        - series
+      properties:
+        period:
+          type: string
+          enum: [day, week, month]
+        total_revenue:
+          type: integer
+          description: Doanh thu món của đơn hoàn tất trong khoảng của `series` (VND). Mọi tổng dòng tiền dưới đây dùng cùng khoảng này; `net_cash_flow` bằng tổng `series[].net`.
+          example: 148500000
+        cod_pending_balance:
+          type: integer
+          description: Tiền thu hộ COD các hãng vận chuyển đang giữ chưa giải ngân (VND)
+          example: 18450000
+        bank_balance_received:
+          type: integer
+          description: Tiền thực tế đã về tài khoản shop trong khoảng = tiền đơn đã thu (sau khi trừ cọc) + tiền cọc đã nhận (VND)
+          example: 130050000
+        shipping_fee_collected:
+          type: integer
+          description: Cước ship đã thực thu từ khách (chỉ đơn đã thu tiền; COD chưa đối soát không tính) trong khoảng của `series` (VND)
+          example: 4500000
+        shipping_cost_paid:
+          type: integer
+          description: Tổng cước thực trả cho các đơn vị vận chuyển (VND)
+          example: 4230000
+        net_shipping_margin:
+          type: integer
+          description: Tổng chênh lệch cước (dương dư cước, âm bù cước) (VND)
+          example: 270000
+        refunds_paid:
+          type: integer
+          description: Tổng tiền đã hoàn cho khách trả hàng (VND)
+          example: 390000
+        batch_capital_spent:
+          type: integer
+          description: Tổng vốn đã chi cho các kiện (tiền kiện + chi phí xử lý) (VND)
+          example: 49900000
+        deposits_received:
+          type: integer
+          description: Tiền cọc đã nhận trong khoảng (đã gồm trong `bank_balance_received`) (VND)
+          example: 100000
+        return_charges:
+          type: integer
+          description: Tiền shop giữ lại trong khoảng = cọc bị mất (trả hàng, hoặc khách hủy sau khi đơn đã xác nhận) + phí ship 2 chiều khi trả hàng (đã trừ vào `refunds_paid`) (VND)
+          example: 50000
+        net_cash_flow:
+          type: integer
+          description: Dòng tiền ròng = tiền thực về - cước thực trả - tiền hoàn - vốn kiện (VND). Có thể âm.
+          example: -1200000
+        series:
+          type: array
+          description: Dòng tiền theo từng mốc của `period`, cũ trước mới sau
+          items:
+            $ref: '#/components/schemas/CashFlowPoint'
+
+    CashFlowPoint:
+      type: object
+      required:
+        - label
+        - period_start
+        - cash_in
+        - cash_out
+        - net
+      properties:
+        label:
+          type: string
+          example: "Tuần 39"
+        period_start:
+          type: string
+          format: date
+          example: "2026-09-21"
+        cash_in:
+          type: integer
+          description: Tiền thực về trong mốc (VND)
+        cash_out:
+          type: integer
+          description: Cước thực trả + tiền hoàn + vốn kiện trong mốc (VND)
+        net:
+          type: integer
+          description: cash_in - cash_out (VND)
+
+    ReconciliationSession:
+      type: object
+      required:
+        - id
+        - session_code
+        - carrier_name
+        - total_cod_amount
+        - carrier_fee
+        - net_received_amount
+        - status
+        - order_count
+        - order_codes
+      properties:
+        id:
+          type: string
+          example: "rec_001"
+        session_code:
+          type: string
+          example: "DS-GHN-241022"
+        carrier_name:
+          type: string
+          example: "Giao Hàng Nhanh (GHN)"
+        total_cod_amount:
+          type: integer
+          description: Tiền hàng COD bưu cục thu từ khách (VND)
+          example: 24500000
+        carrier_fee:
+          type: integer
+          description: Cước vận chuyển bị khấu trừ (VND)
+          example: 180000
+        net_received_amount:
+          type: integer
+          description: Số tiền thực nhận chuyển khoản ngân hàng (VND)
+          example: 24320000
+        order_count:
+          type: integer
+          description: Số đơn trong phiên (= độ dài `order_codes`)
+          example: 2
+        order_codes:
+          type: array
+          description: Mã các đơn COD được đối soát trong phiên
+          items:
+            type: string
+          example: ["DH-260906", "DH-260907"]
+        status:
+          type: string
+          enum: [pending, completed]
+          example: "completed"
+        reconciled_date:
+          type: string
+          format: date-time
+          example: "2024-10-22T15:30:00Z"
+
+    Pagination:
+      type: object
+      required:
+        - total
+        - page
+        - limit
+        - total_pages
+      properties:
+        total:
+          type: integer
+          example: 120
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 12
+        total_pages:
+          type: integer
+          example: 10
+
+    ErrorResponse:
+      type: object
+      description: |
+        Mã lỗi thường gặp: `INVALID_TRANSITION`, `RETURN_WINDOW_EXPIRED`, `DEPOSIT_REQUIRED`, `HOLD_ALREADY_EXTENDED`, `CANCEL_NOT_ALLOWED`, `ORDER_STATUS_CHANGED`, `POLICY_NOT_ACCEPTED`, `POLICY_VERSION_OUTDATED`, `SHIPPING_FEE_REQUIRED`, `PUBLISH_REQUIREMENTS_NOT_MET`,
+        `ITEM_IN_ACTIVE_ORDER`, `EMAIL_NOT_VERIFIED`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `VALIDATION_FAILED`, `NOT_FOUND`.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          example: "ITEM_NOT_FOUND"
+        message:
+          type: string
+          example: "Món hàng không tồn tại hoặc đã rời khỏi kệ."
+        fields:
+          type: array
+          description: Lỗi theo từng ô để giao diện hiện ngay dưới ô
+          items:
+            $ref: '#/components/schemas/FieldErrorDetail'
+        email:
+          type: string
+          format: email
+          description: Có khi `EMAIL_NOT_VERIFIED`, để chuyển sang bước nhập OTP
+
+    FieldErrorDetail:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          example: "shipping_fee"
+        message:
+          type: string
+          example: "Nhập phí ship (0 nếu miễn phí)."
+
+    SuccessResponse:
+      type: object
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Đã đổi mật khẩu."
+
+
+    OrderConflictResponse:
+      type: object
+      required:
+        - error
+        - message
+        - unavailable_item_ids
+      properties:
+        error:
+          type: string
+          example: "ITEMS_ALREADY_RESERVED_OR_SOLD"
+        message:
+          type: string
+          example: "Một số món trong giỏ hàng vừa được khách khác đặt trước hoặc không còn trên kệ."
+        unavailable_item_ids:
+          type: array
+          items:
+            type: string
+          example: ["KN2410-001"]
+
+    CustomerRegisterRequest:
+      type: object
+      required:
+        - name
+        - phone
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          example: "Nguyễn Văn Minh"
+        phone:
+          type: string
+          example: "0901234567"
+        email:
+          type: string
+          format: email
+          example: "khachhang@2handshop.vn"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: "123456"
+
+    CustomerRegisterResponse:
+      type: object
+      required:
+        - success
+        - message
+        - requires_verification
+        - customer_id
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Đăng ký thành công! Mã xác thực đã được gửi tới email của bạn."
+        requires_verification:
+          type: boolean
+          example: true
+        customer_id:
+          type: string
+          example: "KH-1002"
+        demo_otp:
+          type: string
+          description: "Mã OTP mẫu phục vụ kiểm thử nhanh trong môi trường phát triển"
+          example: "868868"
+
+    CustomerVerifyEmailRequest:
+      type: object
+      required:
+        - email
+        - code
+      properties:
+        email:
+          type: string
+          format: email
+          example: "khachhang@2handshop.vn"
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+          example: "868868"
+
+    CustomerLoginRequest:
+      type: object
+      required:
+        - identifier
+        - password
+      properties:
+        identifier:
+          type: string
+          description: "Email hoặc số điện thoại của khách hàng"
+          example: "khachhang@2handshop.vn"
+        password:
+          type: string
+          format: password
+          example: "123456"
+
+    CustomerAuthResponse:
+      type: object
+      required:
+        - token
+        - customer
+      properties:
+        token:
+          type: string
+          description: Token phiên cho client API (gửi header Authorization dạng Bearer). Web không lưu token này, chỉ dùng cookie httpOnly (ADR 006).
+          example: "mock-jwt-customer-token"
+        customer:
+          $ref: '#/components/schemas/CustomerProfile'
+
+    CustomerProfile:
+      type: object
+      required:
+        - id
+        - name
+        - phone
+        - email
+        - is_verified
+        - has_completed_order
+        - created_at
+      properties:
+        id:
+          type: string
+          example: "KH-1001"
+        name:
+          type: string
+          example: "Nguyễn Văn Minh"
+        phone:
+          type: string
+          example: "0901234567"
+        email:
+          type: string
+          format: email
+          example: "khachhang@2handshop.vn"
+        is_verified:
+          type: boolean
+          example: true
+        has_completed_order:
+          type: boolean
+          description: Tài khoản đã có ít nhất một đơn ở trạng thái `completed` (đơn đã trả hàng không tính). Quyết định cách đặt hàng (Son 2026-10) - true là 1 bước, miễn cọc; false là 2 bước, đơn đầu cần cọc. Chỉ có trên hồ sơ của chính khách.
+          example: true
+        default_shipping_address:
+          type: string
+          nullable: true
+          example: "Số 48 Tràng Tiền, Hoàn Kiếm, Hà Nội"
+        default_shipping_note:
+          type: string
+          nullable: true
+          example: "Gọi trước khi giao"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-09-01T08:00:00Z"
+
+    CustomerProfileUpdateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: "Nguyễn Văn Minh"
+        default_shipping_address:
+          type: string
+          nullable: true
+        default_shipping_note:
+          type: string
+          nullable: true
+
+    CustomerOrderSummary:
+      type: object
+      required:
+        - default_shipping_fee
+        - freeship_applied
+        - deposit_status
+        - deposit_amount
+        - hold_expires_at
+        - agreed_return_fee
+        - return_window_days
+        - amount_due
+        - order_code
+        - order_status
+        - payment_status
+        - payment_method
+        - total_items
+        - subtotal
+        - total
+        - items
+        - created_at
+      properties:
+        default_shipping_fee:
+          type: integer
+          nullable: true
+          description: Phí ship mặc định (1 chiều) lấy từ cài đặt `default_shipping_fee` lúc đặt đơn, trước khi tính freeship. null với đơn tạo trước khi có phí mặc định.
+          example: 30000
+        freeship_applied:
+          type: boolean
+          description: Đơn đủ số món để freeship (cài đặt `freeship_min_items`, chốt lúc đặt) nên `shipping_fee` lúc đặt = 0. Shop vẫn đổi được phí khi xác nhận (khu vực đặc biệt); UI admin cảnh báo khi đổi.
+          example: false
+        order_code:
+          type: string
+          example: "DH-260921"
+        order_status:
+          $ref: '#/components/schemas/OrderStatus'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethod'
+        total_items:
+          type: integer
+          example: 1
+        subtotal:
+          type: integer
+          example: 320000
+        shipping_fee:
+          type: integer
+          nullable: true
+        total:
+          type: integer
+          example: 320000
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemPublicSummary'
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        return_deadline:
+          type: string
+          format: date-time
+          nullable: true
+        deposit_status:
+          $ref: '#/components/schemas/DepositStatus'
+        deposit_amount:
+          type: integer
+          description: Tiền cọc của đơn, chốt theo cài đặt lúc tạo đơn (mặc định 50.000₫ với số điện thoại chưa có đơn hoàn tất, 0 nếu không cần cọc)
+          example: 50000
+        amount_due:
+          type: integer
+          description: Số tiền khách còn phải trả cho đơn = `total` − tiền cọc đã nhận (cọc đã chuyển được trừ vào đơn)
+          example: 750000
+        agreed_return_fee:
+          type: integer
+          description: Phí ship 2 chiều khách chịu nếu trả đơn không có cọc, chốt theo cài đặt lúc tạo đơn (ADR 005). Đổi cài đặt sau đó không đổi đơn cũ.
+          example: 50000
+        return_window_days:
+          type: integer
+          description: Số ngày được trả kể từ lúc hoàn tất, chốt theo cài đặt lúc tạo đơn (ADR 005)
+          example: 2
+        hold_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Hết giờ giữ đơn (đơn `new`). Hết giờ mà shop chưa xử lý → đơn cần cọc chưa nhận cọc thì tự hủy (món về kệ); đơn không cần cọc hoặc đã nhận cọc thì tự động xác nhận. Chỉ có ý nghĩa khi đơn còn `new`.
+

@@ -1,0 +1,14 @@
+---
+description: 2hand-shop-backend rules for agents
+alwaysApply: true
+---
+
+# 2hand-shop-backend
+
+Read [`AGENTS.md`](../../AGENTS.md) before editing. Details under [`docs/`](../../docs/).
+
+- Schema SSOT: `src/db/schema.ts`. HTTP SSOT: `docs/02-api/openapi.yaml`.
+- Layering: Controller → Service → Repository.
+- 1-of-1 + transactions: see `docs/04-domain/order-flow.md` and `docs/03-database/transactions.md`.
+- Code/API = English; client errors + business docs = Vietnamese.
+- Do not log PII. Do not rewrite sealed ADRs without supersede.
