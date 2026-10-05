@@ -86,11 +86,15 @@ export class AdminController {
 
   async getOrders(req: Request, res: Response, next: NextFunction) {
     try {
-      const { status, limit, offset } = req.query as any;
+      const q = req.query as any;
       const result = await adminService.getAdminOrders({
-        status,
-        limit: limit ? parseInt(limit, 10) : 50,
-        offset: offset ? parseInt(offset, 10) : 0,
+        order_status: q.order_status,
+        payment_status: q.payment_status,
+        carrier_name: q.carrier_name,
+        search: q.search,
+        sort: q.sort,
+        page: q.page,
+        limit: q.limit,
       });
       return res.status(HttpStatus.OK).json(result);
     } catch (error) {
@@ -111,62 +115,69 @@ export class AdminController {
   async confirmOrder(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { shipping_fee } = req.body;
-      const order = await adminService.confirmOrder(id, shipping_fee);
+      const { shipping_fee, note } = req.body;
+      const order = await adminService.confirmOrder(id, shipping_fee, note);
       return res.status(HttpStatus.OK).json(order);
     } catch (error) {
       next(error);
     }
   }
 
-  async confirmDeposit(req: Request, res: Response, next: NextFunction) {
+  async markDeposit(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { transaction_id } = req.body;
-      const order = await adminService.confirmDeposit(id, transaction_id);
+      const { note } = req.body ?? {};
+      const order = await adminService.markDepositPaid(id, note);
       return res.status(HttpStatus.OK).json(order);
     } catch (error) {
       next(error);
     }
   }
 
-  async shipOrder(req: Request, res: Response, next: NextFunction) {
+  async fulfillOrder(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { carrier_name, tracking_code, actual_shipping_cost } = req.body;
-      const order = await adminService.markAsShipping(id, carrier_name, tracking_code, actual_shipping_cost);
+      const { carrier_name, tracking_code, actual_shipping_cost, note } = req.body;
+      const order = await adminService.fulfillOrder(
+        id,
+        carrier_name,
+        tracking_code,
+        actual_shipping_cost,
+        note
+      );
       return res.status(HttpStatus.OK).json(order);
     } catch (error) {
       next(error);
     }
   }
 
-  async completeOrder(req: Request, res: Response, next: NextFunction) {
+  async updateOrderStatus(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const order = await adminService.completeOrder(id);
+      const { status, reason, return_shipping_fee } = req.body;
+      const order = await adminService.updateOrderStatus(id, status, reason, return_shipping_fee);
       return res.status(HttpStatus.OK).json(order);
     } catch (error) {
       next(error);
     }
   }
 
-  async returnOrder(req: Request, res: Response, next: NextFunction) {
+  async extendHold(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { refund_amount, reason } = req.body;
-      const order = await adminService.processReturn(id, refund_amount, reason);
+      const { minutes } = req.body;
+      const order = await adminService.extendHold(id, minutes);
       return res.status(HttpStatus.OK).json(order);
     } catch (error) {
       next(error);
     }
   }
 
-  async cancelOrder(req: Request, res: Response, next: NextFunction) {
+  async updatePayment(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { reason } = req.body;
-      const order = await adminService.cancelOrder(id, reason);
+      const { payment_status, note } = req.body;
+      const order = await adminService.updatePaymentStatus(id, payment_status, note);
       return res.status(HttpStatus.OK).json(order);
     } catch (error) {
       next(error);

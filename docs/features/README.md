@@ -21,7 +21,7 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 | [`auth-session`](./auth-session/) | Customer OTP + 400-day session + admin — **xong** |
 | [`items-module`](./items-module/) | Public + admin items — **xong** |
 | [`order-concurrency`](./order-concurrency/) | FOR UPDATE + hold + deposit check — **xong** |
-| `order-fulfillment` | Confirm/ship/complete/return/cancel |
+| [`order-fulfillment`](./order-fulfillment/) | Confirm/fulfill/status/deposit — **xong** (local verified) |
 | `batches-cashflow` | Batches + cash-flow summary |
 | `hold-jobs-contract` | Expire job + OpenAPI contract tests |
 | `production-hardening` | Helmet, rate limit, deploy |
