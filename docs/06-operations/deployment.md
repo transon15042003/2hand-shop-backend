@@ -37,9 +37,13 @@ Không thêm Render Cron Job chỉ để ping — Cron trên Render **không thu
 
 Sau khi deploy lần đầu:
 
-1. Repo GitHub → Settings → Secrets → `BACKEND_READY_URL` = `https://<tên-service>.onrender.com/api/ready`
+1. Repo GitHub → Settings → Secrets → `BACKEND_READY_URL` = `https://hk-small-store-api.onrender.com/api/ready`
 2. (Tuỳ chọn) UptimeRobot: Create monitor → HTTP(s) → interval 5–10 min → cùng URL; timeout ≥ 90s (cold start).
 3. Actions → `keep-alive` → Run workflow để thử.
+
+**Live (2026-10-05):** service `hk-small-store-api` → https://hk-small-store-api.onrender.com  
+`CORS_ORIGIN` = `https://hksmallstore.vercel.app,https://hksmallstore-preview.vercel.app,http://localhost:3000`  
+Service cũ `twohand-shop-api` nên **xóa** trên Render Dashboard (tránh đốt đôi free hours).
 
 ## Env production
 
