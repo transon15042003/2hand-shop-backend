@@ -24,7 +24,7 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 | [`order-fulfillment`](./order-fulfillment/) | Confirm/fulfill/status/deposit — **xong** (local verified) |
 | [`batches-cashflow`](./batches-cashflow/) | Batches + cash-flow summary — **xong** (local verified) |
 | [`hold-jobs-contract`](./hold-jobs-contract/) | Expire job + OpenAPI contract tests — **xong** (local verified) |
-| `production-hardening` | Helmet, rate limit, deploy |
+| [`production-hardening`](./production-hardening/) | Helmet, rate limit, deploy — **xong** (local verified) |
 | `openapi-fe-sync` | Đồng bộ enum/contract với Frontend |
 
 Không tạo folder marketplace (`wishlist`, `buyer-seller-chat`, …) — ngoài phạm vi ADR 000.

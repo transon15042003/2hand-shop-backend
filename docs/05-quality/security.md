@@ -24,11 +24,14 @@
 
 ## Rate limiting / headers (production checklist)
 
-- [ ] Rate limit `/auth/login`, `/auth/register`, `/auth/resend-otp`, `POST /orders`
-- [ ] Helmet / security headers
-- [ ] CORS chỉ `CORS_ORIGIN`
-- [ ] Không phản chiếu raw SQL / stack ra client
-- [ ] Secrets chỉ env — không commit `.env`
+- [x] Rate limit `/auth/login`, `/auth/register`, `/auth/resend-otp`, `POST /orders` (+ admin login)
+- [x] Helmet / security headers
+- [x] CORS chỉ `CORS_ORIGIN` (production); localhost chỉ khi `NODE_ENV=development`
+- [x] Không phản chiếu raw SQL / stack ra client
+- [x] Secrets chỉ env — không commit `.env`
+
+Rate limit dùng memory store (một instance Render). Scale ngang → cần Redis store (chưa làm).
+
 
 ## PII & logging
 

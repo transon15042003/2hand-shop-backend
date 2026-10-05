@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { orderController } from '../controllers/order.controller.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { optionalCustomerAuth } from '../middlewares/auth.middleware.js';
+import { createOrderRateLimiter } from '../middlewares/rate-limit.middleware.js';
 import {
   createOrderSchema,
   cancelOrderSchema,
@@ -12,8 +13,12 @@ import {
 
 const router = Router();
 
-router.post('/', optionalCustomerAuth, validate({ body: createOrderSchema }), (req, res, next) =>
-  orderController.createOrder(req, res, next)
+router.post(
+  '/',
+  createOrderRateLimiter,
+  optionalCustomerAuth,
+  validate({ body: createOrderSchema }),
+  (req, res, next) => orderController.createOrder(req, res, next)
 );
 router.get('/track', validate({ query: trackOrderSchema }), (req, res, next) =>
   orderController.trackOrder(req, res, next)

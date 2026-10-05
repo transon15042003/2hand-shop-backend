@@ -1,0 +1,32 @@
+# Exported Render Blueprint — sync/env secrets in Dashboard after first deploy.
+# Docs: docs/06-operations/deployment.md
+
+services:
+  - type: web
+    name: 2hand-shop-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: .
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    startCommand: pnpm run db:migrate && pnpm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_SESSION_TOKEN
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: BLOB_READ_WRITE_TOKEN
+        sync: false
+      - key: HOLD_EXPIRE_INTERVAL_MS
+        value: "180000"

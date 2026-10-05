@@ -20,11 +20,15 @@ import {
   createBatchBodySchema,
   createReconciliationBodySchema,
 } from '../dtos/batch.dto.js';
+import { adminLoginRateLimiter } from '../middlewares/rate-limit.middleware.js';
 
 const router = Router();
 
-router.post('/auth/login', validate({ body: adminLoginSchema }), (req, res, next) =>
-  adminController.login(req, res, next)
+router.post(
+  '/auth/login',
+  adminLoginRateLimiter,
+  validate({ body: adminLoginSchema }),
+  (req, res, next) => adminController.login(req, res, next)
 );
 router.post('/auth/logout', (req, res, next) => adminController.logout(req, res, next));
 
