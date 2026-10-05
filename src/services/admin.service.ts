@@ -5,14 +5,16 @@ import { itemRepository } from '../repositories/item.repository.js';
 import { orderRepository } from '../repositories/order.repository.js';
 import { batchRepository } from '../repositories/batch.repository.js';
 import { settingRepository } from '../repositories/setting.repository.js';
-import { cashFlowRepository } from '../repositories/cash-flow.repository.js';
 import { orderService } from './order.service.js';
+import { cashFlowService } from './cash-flow.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
 import { canChangeItemStatus, draftProblems, publishProblems } from '../utils/item-publish.util.js';
 import { toAdminDetail, toAdminSummary, upsertBodyToRow } from '../utils/item-mapper.util.js';
 import { appendTimeline, toAdminOrderDetail, toAdminOrderSummary } from '../utils/order-mapper.util.js';
 import { depositWasReceived } from '../utils/deposit-status.util.js';
+import { toBatchSummary } from '../utils/batch-mapper.util.js';
+import type { CashFlowPeriod } from '../utils/cash-flow.util.js';
 
 function newItemId() {
   const stamp = Date.now().toString(36).toUpperCase();
@@ -20,6 +22,16 @@ function newItemId() {
     .toString()
     .padStart(3, '0');
   return `KN${stamp}-${rand}`;
+}
+
+async function resolveBatchId(ref: string): Promise<string> {
+  const batch = await batchRepository.findByIdOrCode(ref);
+  if (!batch) {
+    throw new AppError('Không tìm thấy kiện hàng', HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, {
+      batch_id: 'Mã kiện không tồn tại.',
+    });
+  }
+  return batch.id;
 }
 
 async function loadOrderItemsMapped(orderCode: string, tx: typeof db | any = db) {
@@ -132,6 +144,7 @@ export class AdminService {
     }
 
     const row = upsertBodyToRow(body);
+    row.batchId = await resolveBatchId(row.batchId);
     const created = await itemRepository.create({
       id: newItemId(),
       ...row,
@@ -182,6 +195,7 @@ export class AdminService {
 
     // reserved/sold: allow metadata updates but keep status
     const row = upsertBodyToRow({ ...body, status: targetStatus });
+    row.batchId = await resolveBatchId(row.batchId);
     if (existing.status === 'reserved' || existing.status === 'sold') {
       delete (row as any).status;
       delete (row as any).price;
@@ -764,34 +778,107 @@ export class AdminService {
     });
   }
 
-  async getCashFlowSummary() {
-    const entries = await cashFlowRepository.getRecentEntries(100);
+  async getCashFlowSummary(period: CashFlowPeriod = 'week') {
+    return cashFlowService.getSummary(period);
+  }
 
-    let totalIncome = 0;
-    let totalExpense = 0;
-    let totalRefund = 0;
+  async listReconciliations() {
+    return cashFlowService.listReconciliations();
+  }
 
-    for (const e of entries) {
-      if (e.type === 'income') totalIncome += e.amount;
-      else if (e.type === 'expense') totalExpense += e.amount;
-      else if (e.type === 'refund') totalRefund += e.amount;
-    }
-
-    return {
-      totalIncome,
-      totalExpense,
-      totalRefund,
-      netCashFlow: totalIncome - totalExpense - totalRefund,
-      recentEntries: entries.slice(0, 20),
-    };
+  async createReconciliation(body: {
+    session_code: string;
+    carrier_name: string;
+    order_ids: string[];
+    total_cod_collected: number;
+    carrier_shipping_fee: number;
+    net_amount_transferred: number;
+    transfer_date: string;
+  }) {
+    return cashFlowService.createReconciliation(body);
   }
 
   async getBatches() {
-    return await batchRepository.findAll();
+    const rows = await batchRepository.findAll();
+    const stats = await batchRepository.statsForBatches(rows.map((r) => r.id));
+    const summaries = rows.map((r) => {
+      const s = toBatchSummary(r, stats.get(r.id) ?? { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 });
+      if (s.status !== r.status && s.is_broken_even) {
+        void batchRepository.update(r.id, { status: 'break_even' });
+      }
+      return s;
+    });
+
+    return {
+      batches: summaries,
+      totals: {
+        total_batches: summaries.length,
+        total_capital_invested: summaries.reduce((n, b) => n + b.total_investment, 0),
+        total_revenue_generated: summaries.reduce((n, b) => n + b.total_revenue, 0),
+        total_items_cataloged: summaries.reduce((n, b) => n + b.total_items_count, 0),
+      },
+    };
   }
 
-  async createBatch(data: any) {
-    return await batchRepository.create(data);
+  async getBatchDetail(idOrCode: string) {
+    const row = await batchRepository.findByIdOrCode(idOrCode);
+    if (!row) {
+      throw new AppError('Không tìm thấy kiện hàng', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
+    }
+    const stats = await batchRepository.statsForBatches([row.id]);
+    const summary = toBatchSummary(
+      row,
+      stats.get(row.id) ?? { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 }
+    );
+    if (summary.status !== row.status && summary.is_broken_even) {
+      await batchRepository.update(row.id, { status: 'break_even' });
+    }
+    const itemRows = await batchRepository.itemsForBatch(row.id);
+    return {
+      ...summary,
+      items: itemRows.map((i) => toAdminSummary(i as any)),
+    };
+  }
+
+  async createBatch(data: {
+    code: string;
+    name: string;
+    category: string;
+    import_date: string;
+    initial_capital: number;
+    processing_cost: number;
+  }) {
+    const code = data.code.trim().toUpperCase();
+    const dup = await batchRepository.findByCode(code);
+    if (dup) {
+      throw new AppError('Mã kiện đã tồn tại', HttpStatus.BAD_REQUEST, ErrorCode.BATCH_CODE_EXISTS, {
+        code: 'Mã kiện đã được dùng.',
+      });
+    }
+
+    const created = await batchRepository.create({
+      id: code,
+      code,
+      name: data.name.trim(),
+      category: data.category as any,
+      importDate: data.import_date,
+      initialCapital: data.initial_capital,
+      processingCost: data.processing_cost ?? 0,
+      status: 'active',
+    });
+
+    const capital = created.initialCapital + created.processingCost;
+    if (capital > 0) {
+      await db.insert(cashFlowEntries).values({
+        batchId: created.id,
+        type: 'expense',
+        amount: capital,
+        category: 'batch_capital',
+        description: `Vốn kiện ${created.code}`,
+      });
+    }
+
+    return toBatchSummary(created, { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 });
   }
 
   async getSettings() {

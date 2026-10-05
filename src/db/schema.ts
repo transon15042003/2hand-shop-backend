@@ -259,7 +259,7 @@ export const reconciliationSessions = pgTable('reconciliation_sessions', {
   carrier: varchar('carrier', { length: 100 }).notNull(),
   status: varchar('status', { length: 50 }).notNull().default('processing'),
   totalDiscrepancy: integer('total_discrepancy').notNull().default(0),
-  records: jsonb('records').$type<any[]>().default([]),
+  records: jsonb('records').$type<Record<string, unknown> | any[]>().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
