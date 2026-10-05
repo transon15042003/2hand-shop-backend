@@ -1035,8 +1035,8 @@ paths:
       operationId: uploadAdminImage
       summary: Tải một ảnh món lên (ảnh chính hoặc ảnh lỗi)
       description: |
-        Nhận `multipart/form-data` với trường `file`. Chỉ nhận JPEG, PNG, WebP, tối đa 5 MB. Trả về URL để dùng trong `images[].url` / `defect_images[].url`.
-        Mock giữ bytes trong RAM và phục vụ ở `/api/__mock/uploads/{id}` (không thuộc contract). Giai đoạn thật dùng Vercel Blob.
+        Nhận `multipart/form-data` với trường `file`. Chỉ nhận JPEG, PNG, WebP, tối đa 5 MB. Trả về URL công khai (Vercel Blob) để dùng trong `images[].url` / `defect_images[].url`.
+        Backend cần `BLOB_READ_WRITE_TOKEN`. Lỗi `UNSUPPORTED_FILE_TYPE` / `FILE_TOO_LARGE` theo schema bên dưới.
       tags:
         - Admin Items
       security:
@@ -1065,7 +1065,8 @@ paths:
                 properties:
                   url:
                     type: string
-                    example: "/api/__mock/uploads/up_1"
+                    format: uri
+                    example: "https://example.public.blob.vercel-storage.com/items/abc123.webp"
         '400':
           description: Sai định dạng (`UNSUPPORTED_FILE_TYPE`) hoặc quá 5 MB (`FILE_TOO_LARGE`)
           content:

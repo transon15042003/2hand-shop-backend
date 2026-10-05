@@ -3,6 +3,8 @@ import { adminService } from '../services/admin.service.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
 import { appConfig } from '../configs/app.config.js';
 import { clearAdminSessionCookie, setAdminSessionCookie } from '../utils/session-cookie.util.js';
+import { uploadService } from '../services/upload.service.js';
+import { AppError } from '../middlewares/error.middleware.js';
 
 export class AdminController {
   async login(req: Request, res: Response, next: NextFunction) {
@@ -224,6 +226,18 @@ export class AdminController {
     try {
       const settings = await adminService.updateSettings(req.body);
       return res.status(HttpStatus.OK).json(settings);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async uploadImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.file) {
+        throw new AppError('Thiếu file ảnh (trường `file`).', HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED);
+      }
+      const result = await uploadService.storeItemImage(req.file);
+      return res.status(HttpStatus.CREATED).json(result);
     } catch (error) {
       next(error);
     }
