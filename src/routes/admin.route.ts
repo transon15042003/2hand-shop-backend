@@ -5,6 +5,15 @@ import { validate } from '../middlewares/validate.middleware.js';
 import { adminLoginSchema } from '../dtos/auth.dto.js';
 import { itemUpsertSchema, queryAdminItemsSchema, updateItemStatusSchema } from '../dtos/item.dto.js';
 import { updateSettingsSchema } from '../dtos/setting.dto.js';
+import {
+  adminOrdersQuerySchema,
+  confirmOrderBodySchema,
+  extendHoldBodySchema,
+  fulfillOrderBodySchema,
+  markDepositBodySchema,
+  updateOrderStatusBodySchema,
+  updatePaymentBodySchema,
+} from '../dtos/admin-order.dto.js';
 
 const router = Router();
 
@@ -29,16 +38,28 @@ router.patch('/items/:id/status', validate({ body: updateItemStatusSchema }), (r
   adminController.updateItemStatus(req, res, next)
 );
 
-router.get('/orders', (req, res, next) => adminController.getOrders(req, res, next));
-router.get('/orders/:id', (req, res, next) => adminController.getOrderDetail(req, res, next));
-router.post('/orders/:id/confirm', (req, res, next) => adminController.confirmOrder(req, res, next));
-router.post('/orders/:id/confirm-deposit', (req, res, next) =>
-  adminController.confirmDeposit(req, res, next)
+router.get('/orders', validate({ query: adminOrdersQuerySchema }), (req, res, next) =>
+  adminController.getOrders(req, res, next)
 );
-router.post('/orders/:id/ship', (req, res, next) => adminController.shipOrder(req, res, next));
-router.post('/orders/:id/complete', (req, res, next) => adminController.completeOrder(req, res, next));
-router.post('/orders/:id/return', (req, res, next) => adminController.returnOrder(req, res, next));
-router.post('/orders/:id/cancel', (req, res, next) => adminController.cancelOrder(req, res, next));
+router.get('/orders/:id', (req, res, next) => adminController.getOrderDetail(req, res, next));
+router.patch('/orders/:id/confirm', validate({ body: confirmOrderBodySchema }), (req, res, next) =>
+  adminController.confirmOrder(req, res, next)
+);
+router.patch('/orders/:id/fulfill', validate({ body: fulfillOrderBodySchema }), (req, res, next) =>
+  adminController.fulfillOrder(req, res, next)
+);
+router.patch('/orders/:id/status', validate({ body: updateOrderStatusBodySchema }), (req, res, next) =>
+  adminController.updateOrderStatus(req, res, next)
+);
+router.patch('/orders/:id/deposit', validate({ body: markDepositBodySchema }), (req, res, next) =>
+  adminController.markDeposit(req, res, next)
+);
+router.patch('/orders/:id/hold', validate({ body: extendHoldBodySchema }), (req, res, next) =>
+  adminController.extendHold(req, res, next)
+);
+router.patch('/orders/:id/payment', validate({ body: updatePaymentBodySchema }), (req, res, next) =>
+  adminController.updatePayment(req, res, next)
+);
 
 router.get('/cash-flow/summary', (req, res, next) => adminController.getCashFlowSummary(req, res, next));
 router.get('/batches', (req, res, next) => adminController.getBatches(req, res, next));
