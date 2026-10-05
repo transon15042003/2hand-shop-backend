@@ -4,12 +4,23 @@ import itemRoutes from './item.route.js';
 import orderRoutes from './order.route.js';
 import settingRoutes from './setting.route.js';
 import adminRoutes from './admin.route.js';
+import { pool } from '../configs/database.js';
 
 const router = Router();
 
-// Health check
-router.get('/health', (req, res) => {
+// Liveness — no DB (Render platform healthCheckPath; fast while spinning up).
+router.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Readiness — SELECT 1 so keep-alive also warms Neon compute.
+router.get('/ready', async (_req, res, next) => {
+  try {
+    await pool.query('SELECT 1');
+    res.status(200).json({ status: 'ready', timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // V1 Routes
