@@ -18,7 +18,7 @@ export class OrderController {
 
   async trackOrder(req: Request, res: Response, next: NextFunction) {
     try {
-      const { order_code, phone } = req.query as any;
+      const { order_code, phone } = req.query as { order_code: string; phone: string };
       const order = await orderService.trackOrder(order_code, phone);
       return res.status(HttpStatus.OK).json(order);
     } catch (error) {
@@ -26,10 +26,10 @@ export class OrderController {
     }
   }
 
-  async checkDeposit(req: Request, res: Response, next: NextFunction) {
+  async checkDeposit(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { phone } = req.query as any;
-      const result = await orderService.checkDepositRequirement(phone);
+      const { phone } = req.query as { phone: string };
+      const result = await orderService.checkDepositRequirement(phone, req.customer?.id);
       return res.status(HttpStatus.OK).json(result);
     } catch (error) {
       next(error);
@@ -50,7 +50,7 @@ export class OrderController {
   async cancelOrder(req: Request, res: Response, next: NextFunction) {
     try {
       const { code } = req.params;
-      const { reason } = req.body;
+      const reason = req.body.reason || 'Khách hủy đơn';
       const result = await orderService.cancelOrderByCustomer(code, reason);
       return res.status(HttpStatus.OK).json(result);
     } catch (error) {

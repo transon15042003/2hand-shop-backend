@@ -1,30 +1,120 @@
 import { db } from '../configs/database.js';
-import { items, orders, orderItems, cashFlowEntries } from '../db/schema.js';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { items, orders, orderItems } from '../db/schema.js';
+import { eq, inArray, asc } from 'drizzle-orm';
 import { settingRepository } from '../repositories/setting.repository.js';
 import { orderRepository } from '../repositories/order.repository.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
+import { toPublicSummary } from '../utils/item-mapper.util.js';
+
+function dedupeIds(ids: string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
 
 export class OrderService {
   /**
-   * Tạo đơn hàng với tính toàn vẹn 1-of-1 Item Invariant
+   * Lazy hold expiry (ADR 007): pending → cancel+release; not_required|received → auto-confirm.
    */
+  async applyHoldExpiry(orderCode: string, tx: typeof db = db) {
+    const order = await tx.query.orders.findFirst({ where: eq(orders.orderCode, orderCode) });
+    if (!order || order.orderStatus !== 'new' || !order.holdExpiresAt) return order;
+    if (new Date(order.holdExpiresAt).getTime() > Date.now()) return order;
+
+    const deposit = order.depositStatus;
+
+    if (deposit === 'pending') {
+      const [updated] = await tx
+        .update(orders)
+        .set({
+          orderStatus: 'cancelled',
+          cancelReason: 'Quá hạn giữ đơn và chưa nhận cọc',
+          cancelledBy: 'system',
+          cancelledAt: new Date(),
+          depositStatus: 'voided',
+          updatedAt: new Date(),
+        })
+        .where(eq(orders.orderCode, orderCode))
+        .returning();
+
+      const oItems = await tx.query.orderItems.findMany({ where: eq(orderItems.orderCode, orderCode) });
+      for (const oi of oItems) {
+        await tx
+          .update(items)
+          .set({
+            status: 'shelf',
+            reservedUntil: null,
+            reservedByCustomerPhone: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(items.id, oi.itemId));
+      }
+      return updated;
+    }
+
+    if (deposit === 'not_required' || deposit === 'received') {
+      const [updated] = await tx
+        .update(orders)
+        .set({
+          orderStatus: 'confirmed',
+          confirmedBy: 'system',
+          confirmedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(orders.orderCode, orderCode))
+        .returning();
+      return updated;
+    }
+
+    return order;
+  }
+
+  private mapConfirmation(
+    order: typeof orders.$inferSelect,
+    itemRows: { id: string; name: string; category: any; condition: any; price: number; size: string; images: any; status: any; batchId?: string | null }[]
+  ) {
+    return {
+      order_code: order.orderCode,
+      customer_name: order.customerName,
+      customer_phone: order.customerPhone,
+      shipping_address: order.shippingAddress,
+      payment_method: order.paymentMethod,
+      payment_status: order.paymentStatus,
+      order_status: order.orderStatus,
+      subtotal: order.subtotal,
+      shipping_fee: order.shippingFee,
+      default_shipping_fee: order.defaultShippingFee,
+      freeship_applied: order.freeshipApplied,
+      total: order.total,
+      deposit_status: order.depositStatus,
+      deposit_amount: order.depositAmount,
+      amount_due: order.amountDue,
+      agreed_return_fee: order.agreedReturnFee,
+      return_window_days: order.returnWindowDays,
+      hold_expires_at: order.holdExpiresAt?.toISOString() ?? null,
+      items: itemRows.map((r) =>
+        toPublicSummary({
+          ...r,
+          batchId: r.batchId ?? null,
+        } as any)
+      ),
+      created_at: order.createdAt?.toISOString() ?? new Date().toISOString(),
+    };
+  }
+
   async createOrder(data: {
-    customerName: string;
-    customerPhone: string;
-    shippingAddress: string;
-    customerNote?: string;
-    itemIds: string[];
-    paymentMethod: 'bank_transfer' | 'cod';
-    policyAccepted: boolean;
-    policyVersion: number;
+    customer_name: string;
+    customer_phone: string;
+    shipping_address: string;
+    customer_note?: string;
+    item_ids: string[];
+    payment_method: 'bank_transfer' | 'cod';
+    policy_accepted: boolean;
+    policy_version: number;
     customerId?: string;
   }) {
     const settings = await settingRepository.getSettings();
 
-    // 1. Kiểm tra phiên bản chính sách theo ADR 005
-    if (data.policyVersion !== settings.policyVersion) {
+    if (data.policy_version !== settings.policyVersion) {
       throw new AppError(
         'Phiên bản chính sách của cửa hàng đã thay đổi. Vui lòng tải lại trang để xem cập nhật mới nhất.',
         HttpStatus.CONFLICT,
@@ -32,66 +122,69 @@ export class OrderService {
       );
     }
 
-    // 2. Chạy transaction và khóa dòng bằng SELECT ... FOR UPDATE
+    const itemIds = dedupeIds(data.item_ids).sort();
+    if (!itemIds.length) {
+      throw new AppError('Đơn hàng phải có ít nhất 1 sản phẩm', HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED);
+    }
+
     return await db.transaction(async (tx) => {
-      // Dùng raw query khóa FOR UPDATE các items
-      const selectedItems = await tx.execute(
-        sql`SELECT * FROM items WHERE id = ANY(${data.itemIds}) FOR UPDATE`
-      );
+      // Release expired holds that still reserve these items
+      const activeOrderCodes = await orderRepository.findActiveOrdersReservingItems(itemIds, tx as any);
+      for (const code of activeOrderCodes) {
+        await this.applyHoldExpiry(code, tx as any);
+      }
 
-      const rows = selectedItems.rows as any[];
+      const locked = await tx
+        .select()
+        .from(items)
+        .where(inArray(items.id, itemIds))
+        .orderBy(asc(items.id))
+        .for('update');
+      const rows = locked;
 
-      // Kiểm tra có món nào bị trùng hoặc không tìm thấy
-      if (rows.length !== data.itemIds.length) {
+      if (rows.length !== itemIds.length) {
+        const found = new Set(rows.map((r) => r.id));
+        const missing = itemIds.filter((id) => !found.has(id));
         throw new AppError(
           'Một số sản phẩm không tồn tại trong hệ thống',
           HttpStatus.BAD_REQUEST,
-          ErrorCode.ITEM_NOT_FOUND
+          ErrorCode.ITEM_NOT_FOUND,
+          undefined,
+          { unavailableItemIds: missing }
         );
       }
 
-      // Kiểm tra tính khả dụng: tất cả phải ở trạng thái 'shelf'
       const unavailable = rows.filter((r) => r.status !== 'shelf');
       if (unavailable.length > 0) {
-        const itemNames = unavailable.map((u) => u.name).join(', ');
         throw new AppError(
-          `Rất tiếc! Món [${itemNames}] vừa được người khác đặt trước.`,
+          'Một số món trong giỏ hàng vừa được khách khác đặt trước hoặc không còn trên kệ.',
           HttpStatus.CONFLICT,
-          ErrorCode.OUT_OF_STOCK
+          ErrorCode.ITEMS_ALREADY_RESERVED_OR_SOLD,
+          undefined,
+          { unavailableItemIds: unavailable.map((u) => u.id as string) }
         );
       }
 
-      // 3. Tính toán tài chính
       const subtotal = rows.reduce((sum, r) => sum + Number(r.price), 0);
       const freeshipApplied = rows.length >= settings.freeshipMinItems;
       const defaultShippingFee = settings.defaultShippingFee;
       const shippingFee = freeshipApplied ? 0 : defaultShippingFee;
       const total = subtotal + shippingFee;
 
-      // 4. Luật cọc 50k (ADR 004 / ADR 005):
-      // Kiểm tra xem số điện thoại này đã có đơn hàng completed nào chưa
-      const hasCompleted = await orderRepository.hasCompletedOrderBefore(data.customerPhone);
-      const isCod = data.paymentMethod === 'cod';
-      const isBankTransfer = data.paymentMethod === 'bank_transfer';
-
-      let depositAmount = 0;
-      let depositStatus: any = 'not_required';
-
-      if (isCod) {
-        // Đơn COD: khách mới bắt buộc cọc
-        if (!hasCompleted) {
-          depositAmount = settings.depositAmount; // 50,000đ
-          depositStatus = 'pending';
-        }
-      } else if (isBankTransfer) {
-        // Chuyển khoản toàn bộ
-        depositAmount = 0;
-        depositStatus = 'not_required';
+      let trusted = await orderRepository.hasCompletedOrderBefore(data.customer_phone, tx as any);
+      if (!trusted && data.customerId) {
+        trusted = await orderRepository.hasCompletedOrderByCustomerId(data.customerId, tx as any);
       }
 
-      const amountDue = total - (depositStatus === 'received' ? depositAmount : 0);
+      let depositAmount = 0;
+      let depositStatus: 'not_required' | 'pending' = 'not_required';
+      if (!trusted && settings.depositAmount > 0) {
+        depositAmount = settings.depositAmount;
+        depositStatus = 'pending';
+      }
 
-      // 5. Sinh mã đơn hàng
+      const amountDue = total - depositAmount;
+
       const datePart = new Date().toISOString().slice(2, 10).replace(/-/g, '');
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
       const orderCode = `DH-${datePart}-${randomSuffix}`;
@@ -99,30 +192,28 @@ export class OrderService {
       const holdMinutes = settings.orderHoldMinutes;
       const holdExpiresAt = new Date(Date.now() + holdMinutes * 60 * 1000);
 
-      // 6. Cập nhật items sang 'reserved' và gán giữ chỗ
       for (const r of rows) {
         await tx
           .update(items)
           .set({
             status: 'reserved',
             reservedUntil: holdExpiresAt,
-            reservedByCustomerPhone: data.customerPhone,
+            reservedByCustomerPhone: data.customer_phone,
             updatedAt: new Date(),
           })
           .where(eq(items.id, r.id));
       }
 
-      // 7. Tạo bản ghi đơn hàng
       const [order] = await tx
         .insert(orders)
         .values({
           orderCode,
           customerId: data.customerId ?? null,
-          customerName: data.customerName,
-          customerPhone: data.customerPhone,
-          shippingAddress: data.shippingAddress,
-          customerNote: data.customerNote ?? null,
-          paymentMethod: data.paymentMethod,
+          customerName: data.customer_name,
+          customerPhone: data.customer_phone,
+          shippingAddress: data.shipping_address,
+          customerNote: data.customer_note ?? null,
+          paymentMethod: data.payment_method,
           paymentStatus: 'unpaid',
           orderStatus: 'new',
           subtotal,
@@ -138,7 +229,7 @@ export class OrderService {
           holdMinutes,
           holdExpiresAt,
           policyAcceptedAt: new Date(),
-          policyVersion: data.policyVersion,
+          policyVersion: data.policy_version,
           timeline: [
             {
               time: new Date().toISOString(),
@@ -149,58 +240,54 @@ export class OrderService {
         })
         .returning();
 
-      // 8. Tạo chi tiết order_items
       await tx.insert(orderItems).values(
         rows.map((r) => ({
           orderCode,
-          itemId: r.id,
+          itemId: r.id as string,
           priceSnapshot: Number(r.price),
         }))
       );
 
-      return {
-        order_code: order.orderCode,
-        order_status: order.orderStatus,
-        payment_method: order.paymentMethod,
-        payment_status: order.paymentStatus,
-        deposit_status: order.depositStatus,
-        deposit_amount: order.depositAmount,
-        subtotal: order.subtotal,
-        shipping_fee: order.shippingFee,
-        total: order.total,
-        amount_due: order.amountDue,
-        hold_expires_at: order.holdExpiresAt?.toISOString() ?? null,
-        bank_transfer_info: {
-          bank_name: settings.bankName,
-          account_number: settings.bankAccountNumber,
-          account_holder: settings.bankAccountHolder,
-          qr_image_url: settings.bankQrImageUrl,
-          transfer_content: order.orderCode,
-        },
-      };
+      return this.mapConfirmation(
+        order,
+        rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          category: r.category,
+          condition: r.condition,
+          price: Number(r.price),
+          size: r.size,
+          images: r.images,
+          status: 'reserved' as const,
+          batchId: r.batchId,
+        }))
+      );
     });
   }
 
-  /**
-   * Tra cứu đơn hàng
-   */
   async trackOrder(orderCode: string, phone: string) {
+    await db.transaction(async (tx) => {
+      const ord = await tx.query.orders.findFirst({
+        where: eq(orders.orderCode, orderCode),
+      });
+      if (ord && ord.customerPhone === phone) {
+        await this.applyHoldExpiry(orderCode, tx as any);
+      }
+    });
+
     const ord = await orderRepository.findByCodeAndPhone(orderCode, phone);
     if (!ord) {
-      throw new AppError('Không tìm thấy đơn hàng phù hợp với thông tin đã nhập', HttpStatus.NOT_FOUND, ErrorCode.ORDER_NOT_FOUND);
+      throw new AppError(
+        'Không tìm thấy đơn hàng phù hợp với thông tin đã nhập',
+        HttpStatus.NOT_FOUND,
+        ErrorCode.ORDER_NOT_FOUND
+      );
     }
 
     const orderItemRows = await orderRepository.findOrderItems(ord.orderCode);
-    const orderItemsMapped = orderItemRows.map(({ item, priceSnapshot }) => ({
-      id: item.id,
-      name: item.name,
-      category: item.category,
-      condition: item.condition,
-      price: priceSnapshot,
-      size: item.size,
-      main_image: item.images?.[0]?.url ?? '',
-      status: item.status,
-    }));
+    const orderItemsMapped = orderItemRows.map(({ item, priceSnapshot }) =>
+      toPublicSummary({ ...item, price: priceSnapshot } as any)
+    );
 
     return {
       order_code: ord.orderCode,
@@ -222,23 +309,22 @@ export class OrderService {
       return_window_days: ord.returnWindowDays,
       hold_minutes: ord.holdMinutes,
       hold_expires_at: ord.holdExpiresAt?.toISOString() ?? null,
-      cancel_reason: ord.cancelReason,
-      cancelled_by: ord.cancelledBy,
+      cancel_reason: ord.cancelReason ?? null,
+      cancelled_by: ord.cancelledBy ?? null,
       cancelled_at: ord.cancelledAt?.toISOString() ?? null,
-      confirmed_by: ord.confirmedBy,
-      carrier_name: ord.carrierName,
-      tracking_code: ord.trackingCode,
+      confirmed_by: ord.confirmedBy ?? null,
+      carrier_name: ord.carrierName ?? null,
+      tracking_code: ord.trackingCode ?? null,
       timeline: ord.timeline ?? [],
       items: orderItemsMapped,
       created_at: ord.createdAt?.toISOString() ?? new Date().toISOString(),
     };
   }
 
-  /**
-   * Gia hạn thời gian giữ đơn 1 lần
-   */
   async extendHold(orderCode: string, minutes: number) {
     return await db.transaction(async (tx) => {
+      await this.applyHoldExpiry(orderCode, tx as any);
+
       const order = await tx.query.orders.findFirst({
         where: eq(orders.orderCode, orderCode),
       });
@@ -248,11 +334,19 @@ export class OrderService {
       }
 
       if (order.orderStatus !== 'new') {
-        throw new AppError('Chỉ có thể gia hạn khi đơn ở trạng thái mới đặt (new)', HttpStatus.CONFLICT, ErrorCode.INVALID_TRANSITION);
+        throw new AppError(
+          'Chỉ có thể gia hạn khi đơn ở trạng thái mới đặt (new)',
+          HttpStatus.CONFLICT,
+          ErrorCode.INVALID_TRANSITION
+        );
       }
 
       if (order.holdExtendedAt) {
-        throw new AppError('Đơn hàng này đã được gia hạn giữ chỗ trước đó', HttpStatus.CONFLICT, ErrorCode.HOLD_ALREADY_EXTENDED);
+        throw new AppError(
+          'Đơn hàng này đã được gia hạn giữ chỗ trước đó',
+          HttpStatus.CONFLICT,
+          ErrorCode.HOLD_ALREADY_EXTENDED
+        );
       }
 
       const currentExpires = order.holdExpiresAt ? new Date(order.holdExpiresAt) : new Date();
@@ -269,6 +363,11 @@ export class OrderService {
         .where(eq(orders.orderCode, orderCode))
         .returning();
 
+      const oItems = await tx.query.orderItems.findMany({ where: eq(orderItems.orderCode, orderCode) });
+      for (const oi of oItems) {
+        await tx.update(items).set({ reservedUntil: newExpiresAt, updatedAt: new Date() }).where(eq(items.id, oi.itemId));
+      }
+
       return {
         order_code: updated.orderCode,
         hold_expires_at: updated.holdExpiresAt?.toISOString(),
@@ -277,11 +376,10 @@ export class OrderService {
     });
   }
 
-  /**
-   * Khách tự hủy đơn hàng
-   */
   async cancelOrderByCustomer(orderCode: string, reason: string) {
     return await db.transaction(async (tx) => {
+      await this.applyHoldExpiry(orderCode, tx as any);
+
       const order = await tx.query.orders.findFirst({
         where: eq(orders.orderCode, orderCode),
       });
@@ -290,9 +388,18 @@ export class OrderService {
         throw new AppError('Đơn hàng không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ORDER_NOT_FOUND);
       }
 
-      if (order.orderStatus !== 'new') {
-        throw new AppError('Chỉ có thể hủy đơn khi shop chưa xác nhận đơn', HttpStatus.CONFLICT, ErrorCode.CANCEL_NOT_ALLOWED);
+      if (order.orderStatus !== 'new' && order.orderStatus !== 'confirmed') {
+        throw new AppError(
+          'Chỉ có thể hủy đơn khi shop chưa giao bưu cục',
+          HttpStatus.CONFLICT,
+          ErrorCode.CANCEL_NOT_ALLOWED
+        );
       }
+
+      let depositStatus = order.depositStatus;
+      if (order.depositStatus === 'pending') depositStatus = 'voided';
+      else if (order.depositStatus === 'received' && order.orderStatus === 'new') depositStatus = 'refunded';
+      else if (order.depositStatus === 'received' && order.orderStatus === 'confirmed') depositStatus = 'forfeited';
 
       const [updated] = await tx
         .update(orders)
@@ -301,12 +408,12 @@ export class OrderService {
           cancelReason: reason,
           cancelledBy: 'customer',
           cancelledAt: new Date(),
+          depositStatus,
           updatedAt: new Date(),
         })
         .where(eq(orders.orderCode, orderCode))
         .returning();
 
-      // Trả lại các món hàng về kệ (shelf)
       const oItems = await tx.query.orderItems.findMany({
         where: eq(orderItems.orderCode, orderCode),
       });
@@ -331,18 +438,25 @@ export class OrderService {
     });
   }
 
-  /**
-   * Kiểm tra số điện thoại có cần đặt cọc hay không
-   */
-  async checkDepositRequirement(phone: string) {
-    const hasCompleted = await orderRepository.hasCompletedOrderBefore(phone);
+  async checkDepositRequirement(phone: string, customerId?: string) {
     const settings = await settingRepository.getSettings();
+    let trusted = await orderRepository.hasCompletedOrderBefore(phone);
+    if (!trusted && customerId) {
+      trusted = await orderRepository.hasCompletedOrderByCustomerId(customerId);
+    }
+
+    if (settings.depositAmount <= 0 || trusted) {
+      return {
+        deposit_required: false,
+        deposit_amount: 0,
+        return_fee: settings.returnFee,
+      };
+    }
 
     return {
-      phone,
-      is_trusted_customer: hasCompleted,
-      deposit_required: !hasCompleted,
-      deposit_amount: hasCompleted ? 0 : settings.depositAmount,
+      deposit_required: true,
+      deposit_amount: settings.depositAmount,
+      return_fee: settings.returnFee,
     };
   }
 }

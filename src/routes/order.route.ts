@@ -6,14 +6,29 @@ import {
   createOrderSchema,
   cancelOrderSchema,
   extendHoldSchema,
+  checkDepositSchema,
+  trackOrderSchema,
 } from '../dtos/order.dto.js';
 
 const router = Router();
 
-router.post('/', optionalCustomerAuth, validate({ body: createOrderSchema }), orderController.createOrder);
-router.get('/track', orderController.trackOrder);
-router.get('/deposit-check', orderController.checkDeposit);
-router.post('/:code/extend', validate({ body: extendHoldSchema }), orderController.extendHold);
-router.post('/:code/cancel', validate({ body: cancelOrderSchema }), orderController.cancelOrder);
+router.post('/', optionalCustomerAuth, validate({ body: createOrderSchema }), (req, res, next) =>
+  orderController.createOrder(req, res, next)
+);
+router.get('/track', validate({ query: trackOrderSchema }), (req, res, next) =>
+  orderController.trackOrder(req, res, next)
+);
+router.get(
+  '/deposit-check',
+  optionalCustomerAuth,
+  validate({ query: checkDepositSchema }),
+  (req, res, next) => orderController.checkDeposit(req, res, next)
+);
+router.post('/:code/extend', validate({ body: extendHoldSchema }), (req, res, next) =>
+  orderController.extendHold(req, res, next)
+);
+router.post('/:code/cancel', validate({ body: cancelOrderSchema }), (req, res, next) =>
+  orderController.cancelOrder(req, res, next)
+);
 
 export default router;

@@ -93,8 +93,9 @@ Align POST /orders with OpenAPI conflict body and lazy hold expiry.
 
 ## Đồng bộ Frontend
 
-- Contract HTTP: BE `docs/02-api/openapi.yaml` ↔ FE `contracts/openapi.yaml` — cùng PR BE hoặc issue/PR FE ngay sau.
-- Không bắt buộc cùng monorepo git; ghi link PR FE trong body PR BE khi lệch contract.
+- Contract HTTP: BE `docs/02-api/openapi.yaml` ↔ FE `contracts/openapi.yaml`.
+- FE phụ thuộc API mới → **merge PR BE trước**, rồi PR FE; link chéo trong body.
+- FE SSOT quy trình: `2hand-shop/docs/02-conventions/git-workflow.md` (cùng mô hình trunk + squash + slug).
 
 ## Bảo vệ `main` (khuyến nghị GitHub)
 
