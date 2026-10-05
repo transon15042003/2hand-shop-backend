@@ -703,7 +703,10 @@ paths:
     post:
       operationId: loginAdmin
       summary: Đăng nhập quản trị viên
-      description: Xác thực bằng mật khẩu duy nhất của chủ shop (ADR 001). Trả về Bearer Token. Mock dùng `MOCK_ADMIN_PASSWORD` (mặc định `admin123`).
+      description: |
+        Đăng nhập bằng **username + mật khẩu** của tài khoản trong bảng `admin_users`.
+        Trả JWT (`typ=admin`) + cookie phiên admin. Owner có đủ quyền; staff theo `permissions`.
+        Tạo owner đầu tiên: `pnpm run admin:create-owner -- --username … --password …`.
       tags:
         - Admin Auth
       security: []
@@ -714,8 +717,13 @@ paths:
             schema:
               type: object
               required:
+                - username
                 - password
               properties:
+                username:
+                  type: string
+                  minLength: 1
+                  example: son
                 password:
                   type: string
                   format: password
@@ -724,7 +732,7 @@ paths:
           description: Đăng nhập thành công
           headers:
             Set-Cookie:
-              description: Cấp phiên `hk_small_store_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
+              description: Cấp phiên admin httpOnly (session cookie).
               schema:
                 type: string
           content:
@@ -737,23 +745,12 @@ paths:
                 properties:
                   token:
                     type: string
-                    example: "mock-jwt-admin-token"
                   user:
-                    type: object
-                    required:
-                      - role
-                      - name
-                    properties:
-                      role:
-                        type: string
-                        enum: [admin]
-                      name:
-                        type: string
-                        example: "Chủ shop / Quản trị viên"
+                    $ref: '#/components/schemas/AdminUser'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          description: Sai mật khẩu
+          description: Sai username hoặc mật khẩu
           content:
             application/json:
               schema:
@@ -782,6 +779,119 @@ paths:
                     example: true
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /admin/auth/me:
+    get:
+      operationId: getAdminMe
+      summary: Thông tin admin đang đăng nhập
+      tags:
+        - Admin Auth
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserPublic'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/admins:
+    get:
+      operationId: listAdmins
+      summary: Danh sách tài khoản admin
+      description: Cần quyền `manage_admins` (owner luôn có).
+      tags:
+        - Admin Accounts
+      security:
+        - AdminAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [admins]
+                properties:
+                  admins:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      operationId: createAdmin
+      summary: Tạo tài khoản admin
+      description: |
+        Cần `manage_admins`. Chỉ **owner** mới được tạo role `owner`.
+        Staff nhận `permissions` checkbox; owner bỏ qua permissions (đủ quyền).
+      tags:
+        - Admin Accounts
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Username trùng
+
+  /admin/admins/{id}:
+    patch:
+      operationId: updateAdmin
+      summary: Cập nhật tài khoản admin
+      description: Cần `manage_admins`. Không thể hạ/vô hiệu hóa owner active cuối cùng. Chỉ owner gán role owner.
+      tags:
+        - Admin Accounts
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ==========================================
   # ADMIN ITEMS MANAGEMENT
@@ -1827,6 +1937,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     BadRequest:
       description: Yêu cầu không hợp lệ (`fields` chỉ ra ô cần sửa nếu có)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Đã đăng nhập nhưng thiếu quyền (RBAC)
       content:
         application/json:
           schema:
@@ -3230,7 +3346,7 @@ components:
       type: object
       description: |
         Mã lỗi thường gặp: `INVALID_TRANSITION`, `RETURN_WINDOW_EXPIRED`, `DEPOSIT_REQUIRED`, `HOLD_ALREADY_EXTENDED`, `CANCEL_NOT_ALLOWED`, `ORDER_STATUS_CHANGED`, `POLICY_NOT_ACCEPTED`, `POLICY_VERSION_OUTDATED`, `SHIPPING_FEE_REQUIRED`, `PUBLISH_REQUIREMENTS_NOT_MET`,
-        `ITEM_IN_ACTIVE_ORDER`, `EMAIL_NOT_VERIFIED`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `VALIDATION_FAILED`, `NOT_FOUND`.
+        `ITEM_IN_ACTIVE_ORDER`, `EMAIL_NOT_VERIFIED`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `FORBIDDEN`, `VALIDATION_FAILED`, `NOT_FOUND`.
       required:
         - error
         - message
@@ -3250,6 +3366,82 @@ components:
           type: string
           format: email
           description: Có khi `EMAIL_NOT_VERIFIED`, để chuyển sang bước nhập OTP
+
+    AdminPermission:
+      type: string
+      enum: [items, orders, deposits, batches, cash_flow, settings, manage_admins]
+
+    AdminUserPublic:
+      type: object
+      required: [id, username, display_name, role, permissions]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [owner, staff]
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPermission'
+          description: Quyền hiệu lực (owner = đủ 7 quyền)
+
+    AdminUser:
+      allOf:
+        - $ref: '#/components/schemas/AdminUserPublic'
+        - type: object
+          required: [is_active, created_at]
+          properties:
+            is_active:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
+
+    CreateAdminRequest:
+      type: object
+      required: [username, password, display_name, role]
+      properties:
+        username:
+          type: string
+          minLength: 3
+        password:
+          type: string
+          format: password
+          minLength: 6
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [owner, staff]
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPermission'
+          description: Chỉ áp dụng cho staff
+
+    UpdateAdminRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [owner, staff]
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPermission'
+        password:
+          type: string
+          format: password
+          minLength: 6
+        is_active:
+          type: boolean
 
     FieldErrorDetail:
       type: object

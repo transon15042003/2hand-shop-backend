@@ -8,10 +8,11 @@ import {
   SESSION_DURATION_DAYS,
   SESSION_SLIDE_MIN_INTERVAL_MS,
 } from '../constants/http-status.js';
-import { appConfig } from '../configs/app.config.js';
 import { customerRepository } from '../repositories/customer.repository.js';
 import { HashUtil } from '../utils/hash.util.js';
 import { clearCustomerSessionCookie, setCustomerSessionCookie } from '../utils/session-cookie.util.js';
+import { JwtUtil } from '../utils/jwt.util.js';
+import { hasPermission, type AdminPermission } from '../constants/admin-permissions.js';
 
 function readCustomerToken(req: AuthenticatedRequest): string | undefined {
   return req.cookies?.[SESSION_COOKIE_NAME] || req.headers.authorization?.replace(/^Bearer\s+/i, '');
@@ -97,7 +98,23 @@ export async function optionalCustomerAuth(req: AuthenticatedRequest, res: Respo
 export async function requireAdminAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const token = req.cookies?.[ADMIN_COOKIE_NAME] || req.headers.authorization?.replace(/^Bearer\s+/i, '');
 
-  if (!token || token !== appConfig.adminSessionToken) {
+  if (!token) {
+    return res.status(HttpStatus.UNAUTHORIZED).json({
+      code: ErrorCode.UNAUTHORIZED,
+      message: 'Bạn không có quyền truy cập trang quản trị',
+    });
+  }
+
+  const payload = JwtUtil.verify<{
+    typ?: string;
+    sub?: string;
+    role?: 'owner' | 'staff';
+    permissions?: AdminPermission[];
+    username?: string;
+    displayName?: string;
+  }>(token);
+
+  if (!payload || payload.typ !== 'admin' || !payload.sub || !payload.role) {
     return res.status(HttpStatus.UNAUTHORIZED).json({
       code: ErrorCode.UNAUTHORIZED,
       message: 'Bạn không có quyền truy cập trang quản trị',
@@ -105,5 +122,32 @@ export async function requireAdminAuth(req: AuthenticatedRequest, res: Response,
   }
 
   req.isAdmin = true;
+  req.admin = {
+    id: payload.sub,
+    username: payload.username || '',
+    displayName: payload.displayName || '',
+    role: payload.role,
+    permissions: payload.permissions ?? [],
+  };
   next();
+}
+
+/** Prefer after requireAdminAuth. Owner always passes. */
+export function requirePermission(...keys: AdminPermission[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const admin = req.admin;
+    if (!admin) {
+      return res.status(HttpStatus.UNAUTHORIZED).json({
+        code: ErrorCode.UNAUTHORIZED,
+        message: 'Bạn không có quyền truy cập trang quản trị',
+      });
+    }
+    if (!hasPermission(admin.role, admin.permissions, keys)) {
+      return res.status(HttpStatus.FORBIDDEN).json({
+        code: ErrorCode.FORBIDDEN,
+        message: 'Bạn không có quyền thực hiện thao tác này',
+      });
+    }
+    next();
+  };
 }

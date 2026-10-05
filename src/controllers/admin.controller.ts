@@ -1,32 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { adminService } from '../services/admin.service.js';
+import { adminAuthService } from '../services/admin-auth.service.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
-import { appConfig } from '../configs/app.config.js';
 import { clearAdminSessionCookie, setAdminSessionCookie } from '../utils/session-cookie.util.js';
 import { uploadService } from '../services/upload.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
+import type { AuthenticatedRequest } from '../interfaces/index.js';
 
 export class AdminController {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { password } = req.body;
-      const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-      if (password !== adminPassword && password !== appConfig.adminSessionToken) {
-        return res.status(HttpStatus.UNAUTHORIZED).json({
-          code: ErrorCode.INVALID_CREDENTIALS,
-          message: 'Mật khẩu quản trị không đúng',
-        });
-      }
-
-      setAdminSessionCookie(res, appConfig.adminSessionToken);
-
-      return res.status(HttpStatus.OK).json({
-        token: appConfig.adminSessionToken,
-        user: {
-          role: 'admin',
-          name: 'Chủ shop / Quản trị viên',
-        },
-      });
+      const { username, password } = req.body;
+      const result = await adminAuthService.login(username, password);
+      setAdminSessionCookie(res, result.token);
+      return res.status(HttpStatus.OK).json(result);
     } catch (error) {
       next(error);
     }
@@ -36,6 +23,56 @@ export class AdminController {
     try {
       clearAdminSessionCookie(res);
       return res.status(HttpStatus.OK).json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async listAdmins(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await adminAuthService.listAdmins();
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.admin) {
+        throw new AppError('Unauthorized', HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
+      }
+      const created = await adminAuthService.createAdmin(req.admin, req.body);
+      return res.status(HttpStatus.CREATED).json(created);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.admin) {
+        throw new AppError('Unauthorized', HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
+      }
+      const updated = await adminAuthService.updateAdmin(req.admin, req.params.id, req.body);
+      return res.status(HttpStatus.OK).json(updated);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getMe(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.admin) {
+        throw new AppError('Unauthorized', HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
+      }
+      return res.status(HttpStatus.OK).json({
+        id: req.admin.id,
+        username: req.admin.username,
+        display_name: req.admin.displayName,
+        role: req.admin.role,
+        permissions: req.admin.permissions,
+      });
     } catch (error) {
       next(error);
     }
