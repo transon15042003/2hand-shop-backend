@@ -11,8 +11,9 @@ Target điển hình: Render / Railway / Fly.io (Node web service).
 
 ## Env production
 
-Bắt buộc: `DATABASE_URL`, `JWT_SECRET`, `ADMIN_SESSION_TOKEN`, `CORS_ORIGIN`, `NODE_ENV=production`.  
-Cookie Secure khi HTTPS.
+Bắt buộc: `DATABASE_URL`, `JWT_SECRET`, `ADMIN_SESSION_TOKEN`, `CORS_ORIGIN`, `NODE_ENV=production`, `ADMIN_PASSWORD` (mạnh).  
+Upload ảnh admin: `BLOB_READ_WRITE_TOKEN` (Vercel Blob).  
+Cookie Secure khi HTTPS. Tên biến / cách lấy: [`.env.example`](../../.env.example).
 
 ## CI gợi ý
 
