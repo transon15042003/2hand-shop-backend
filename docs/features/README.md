@@ -20,7 +20,7 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 | [`db-foundation`](./db-foundation/) | Schema + migrate + seed — **xong** (local verified) |
 | [`auth-session`](./auth-session/) | Customer OTP + 400-day session + admin — **xong** |
 | [`items-module`](./items-module/) | Public + admin items — **xong** |
-| `order-concurrency` | FOR UPDATE + hold + deposit check |
+| [`order-concurrency`](./order-concurrency/) | FOR UPDATE + hold + deposit check — **xong** |
 | `order-fulfillment` | Confirm/ship/complete/return/cancel |
 | `batches-cashflow` | Batches + cash-flow summary |
 | `hold-jobs-contract` | Expire job + OpenAPI contract tests |

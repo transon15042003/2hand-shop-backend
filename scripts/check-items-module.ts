@@ -65,8 +65,11 @@ async function main() {
     body: JSON.stringify({ status: 'shelf' }),
   });
   assert(badShelf.status === 400, `expected publish fail, got ${badShelf.status}`);
-  const badBody = (await badShelf.json()) as { code: string };
-  assert(badBody.code === 'PUBLISH_REQUIREMENTS_NOT_MET', `code ${badBody.code}`);
+  const badBody = (await badShelf.json()) as { error: string; code?: string };
+  assert(
+    badBody.error === 'PUBLISH_REQUIREMENTS_NOT_MET' || badBody.code === 'PUBLISH_REQUIREMENTS_NOT_MET',
+    `code ${badBody.error || badBody.code}`
+  );
 
   console.log('check-items-module: ok');
 }

@@ -28,7 +28,7 @@ export function validate(schema: {
         });
 
         return res.status(HttpStatus.BAD_REQUEST).json({
-          code: ErrorCode.VALIDATION_FAILED,
+          error: ErrorCode.VALIDATION_FAILED,
           message: error.errors[0]?.message || 'Dữ liệu không hợp lệ',
           fields,
         });
