@@ -78,6 +78,18 @@ export const depositStatusEnum = pgEnum('deposit_status', [
   'voided',
 ]);
 
+export const adminRoleEnum = pgEnum('admin_role', ['owner', 'staff']);
+
+/** Staff checkbox permissions; owners ignore this list and get all. */
+export type AdminPermission =
+  | 'items'
+  | 'orders'
+  | 'deposits'
+  | 'batches'
+  | 'cash_flow'
+  | 'settings'
+  | 'manage_admins';
+
 export const cancelActorEnum = pgEnum('cancel_actor', [
   'customer',
   'shop',
@@ -169,6 +181,18 @@ export const customers = pgTable('customers', {
   otpExpiresAt: timestamp('otp_expires_at', { withTimezone: true }),
   defaultShippingAddress: text('default_shipping_address'),
   defaultShippingNote: text('default_shipping_note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
+export const adminUsers = pgTable('admin_users', {
+  id: varchar('id', { length: 50 }).primaryKey(),
+  username: varchar('username', { length: 64 }).notNull().unique(),
+  passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  displayName: varchar('display_name', { length: 255 }).notNull(),
+  role: adminRoleEnum('role').notNull().default('staff'),
+  permissions: jsonb('permissions').$type<AdminPermission[]>().notNull().default([]),
+  isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

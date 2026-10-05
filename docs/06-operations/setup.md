@@ -20,12 +20,12 @@ cp .env.example .env
 | `PORT` | nên có | HTTP port (default `5000`) |
 | `NODE_ENV` | nên có | `development` / `production` |
 | `DATABASE_URL` | **có** | Postgres (Docker / local / Neon) |
-| `JWT_SECRET` | **có** (prod) | Ký JWT |
-| `ADMIN_SESSION_TOKEN` | **có** | Bearer / cookie admin |
-| `ADMIN_PASSWORD` | tuỳ | Mật khẩu `/admin/login` (default `admin123`) |
+| `JWT_SECRET` | **có** (prod) | Ký JWT (khách + admin) |
 | `CORS_ORIGIN` | **có** | Origin FE |
 | `SEED_CUSTOMER_PASSWORD` | tuỳ | Mật khẩu khách seed (default `123456`) |
 | `BLOB_READ_WRITE_TOKEN` | **có** khi upload ảnh | Vercel Blob Read/Write |
+
+> `ADMIN_PASSWORD` / `ADMIN_SESSION_TOKEN` **không còn** dùng cho login. Tạo chủ shop: `pnpm run admin:create-owner -- --username … --password … [--name …]`.
 
 Tóm tắt tạo nhanh:
 
@@ -73,4 +73,4 @@ pnpm run db:seed
 
 Insert-if-missing: `shop_settings` id=1, batch mẫu, 2 items (`shelf` + `draft`), 1 customer demo (`khachhang@hksmallstore.vn` / `SEED_CUSTOMER_PASSWORD` hoặc `123456`).
 
-**Không** chạy seed tự động trên production deploy. Admin login dùng mật khẩu `ADMIN_PASSWORD` + session `ADMIN_SESSION_TOKEN` (env), không từ bảng users.
+**Không** chạy seed tự động trên production deploy. Admin accounts nằm ở bảng `admin_users` — tạo owner bằng `pnpm run admin:create-owner` (không seed).

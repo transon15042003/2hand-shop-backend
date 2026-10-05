@@ -47,7 +47,8 @@ Service cũ `twohand-shop-api` nên **xóa** trên Render Dashboard (tránh đ�
 
 ## Env production
 
-Bắt buộc: `DATABASE_URL`, `JWT_SECRET`, `ADMIN_SESSION_TOKEN`, `CORS_ORIGIN`, `NODE_ENV=production`, `ADMIN_PASSWORD` (mạnh).  
+Bắt buộc: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `NODE_ENV=production`.  
+Admin: tạo owner bằng CLI (`pnpm run admin:create-owner`) sau migrate — không còn `ADMIN_PASSWORD` / `ADMIN_SESSION_TOKEN` cho login.  
 Upload ảnh admin: `BLOB_READ_WRITE_TOKEN` (Vercel Blob).  
 Hold expire: in-process `HOLD_EXPIRE_INTERVAL_MS` (mặc định 3 phút) hoặc Cron Job chạy `pnpm run job:expire-holds`.  
 Rate limit (optional): `RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_ORDER_MAX`, `RATE_LIMIT_ADMIN_MAX` (+ `*_WINDOW_MS`).  
