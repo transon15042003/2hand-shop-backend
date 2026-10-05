@@ -3077,6 +3077,9 @@ components:
         - total_items_count
         - sold_items_count
         - total_revenue
+        - catalog_list_total
+        - catalog_cost_total
+        - list_vs_investment
         - break_even_target
         - remaining_to_break_even
         - is_broken_even
@@ -3121,6 +3124,18 @@ components:
           type: integer
           description: Doanh thu thực tế đã bán (VND)
           example: 26800000
+        catalog_list_total:
+          type: integer
+          description: Tổng giá bán ghi trên các món trong kiện (VND)
+          example: 32000000
+        catalog_cost_total:
+          type: integer
+          description: Tổng giá vốn ghi trên từng món nếu có (VND)
+          example: 18000000
+        list_vs_investment:
+          type: integer
+          description: catalog_list_total − total_investment (dương = giá bán tổng trên vốn kiện)
+          example: 12800000
         break_even_target:
           type: integer
           description: Cột mốc hoàn vốn an toàn (thường là 130% vốn đầu tư)

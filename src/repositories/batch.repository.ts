@@ -71,6 +71,8 @@ export class BatchRepository {
         shelf: sql<number>`count(*) filter (where ${items.status} = 'shelf')`,
         reserved: sql<number>`count(*) filter (where ${items.status} = 'reserved')`,
         sold: sql<number>`count(*) filter (where ${items.status} = 'sold')`,
+        listTotal: sql<number>`coalesce(sum(${items.price}), 0)`,
+        costTotal: sql<number>`coalesce(sum(${items.costPrice}), 0)`,
       })
       .from(items)
       .where(inArray(items.batchId, batchIds))
@@ -81,6 +83,11 @@ export class BatchRepository {
       const cur = map.get(row.batchId) ?? emptyBatchStats();
       cur.totalItemsCount = Number(row.total);
       cur.soldItemsCount = Number(row.sold);
+<<<<<<< HEAD
+      cur.catalogListTotal = Number(row.listTotal);
+      cur.catalogCostTotal = Number(row.costTotal);
+=======
+>>>>>>> origin/main
       cur.itemStatusCounts = {
         draft: Number(row.draft),
         shelf: Number(row.shelf),

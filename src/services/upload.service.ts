@@ -23,13 +23,29 @@ export class UploadService {
     }
 
     const pathname = `items/${randomUUID()}.${ext}`;
-    const blob = await put(pathname, file.buffer, {
-      access: 'public',
-      contentType: mime,
-      token,
-    });
-
-    return { url: blob.url };
+    try {
+      // Product photos must be publicly readable on the storefront.
+      const blob = await put(pathname, file.buffer, {
+        access: 'public',
+        contentType: mime,
+        token,
+      });
+      return { url: blob.url };
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      if (/private store/i.test(raw) || /public access on a private/i.test(raw)) {
+        throw new AppError(
+          'Blob store đang ở chế độ Private. Tạo/đổi sang store Public trên Vercel Storage → Blob (ảnh món cần URL công khai), rồi cập nhật BLOB_READ_WRITE_TOKEN trên Render.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          ErrorCode.INTERNAL_ERROR
+        );
+      }
+      throw new AppError(
+        `Không tải lên được ảnh: ${raw}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        ErrorCode.INTERNAL_ERROR
+      );
+    }
   }
 }
 
