@@ -3070,7 +3070,6 @@ components:
         - id
         - code
         - name
-        - category
         - import_date
         - initial_capital
         - processing_cost
@@ -3079,8 +3078,11 @@ components:
         - sold_items_count
         - total_revenue
         - break_even_target
+        - remaining_to_break_even
         - is_broken_even
         - status
+        - categories
+        - item_status_counts
       properties:
         id:
           type: string
@@ -3091,8 +3093,6 @@ components:
         name:
           type: string
           example: "Kiện Áo Khoác & Len Thu Đông Tuyển Chọn"
-        category:
-          $ref: '#/components/schemas/ItemCategory'
         import_date:
           type: string
           format: date
@@ -3125,18 +3125,46 @@ components:
           type: integer
           description: Cột mốc hoàn vốn an toàn (thường là 130% vốn đầu tư)
           example: 24960000
+        remaining_to_break_even:
+          type: integer
+          description: Số tiền còn thiếu để đạt mốc hoàn vốn (VND)
+          example: 0
         is_broken_even:
           type: boolean
           example: true
         status:
           $ref: '#/components/schemas/BatchStatus'
+        categories:
+          type: array
+          description: Phân loại suy ra từ món trong kiện, sắp theo số món giảm dần
+          items:
+            $ref: '#/components/schemas/ItemCategory'
+        item_status_counts:
+          type: object
+          required:
+            - draft
+            - shelf
+            - reserved
+            - sold
+          properties:
+            draft:
+              type: integer
+              example: 3
+            shelf:
+              type: integer
+              example: 12
+            reserved:
+              type: integer
+              example: 1
+            sold:
+              type: integer
+              example: 5
 
     CreateBatchRequest:
       type: object
       required:
         - code
         - name
-        - category
         - import_date
         - initial_capital
         - processing_cost
@@ -3147,8 +3175,6 @@ components:
         name:
           type: string
           example: "Kiện Sơ Mi Vintage Nhật Bản"
-        category:
-          $ref: '#/components/schemas/ItemCategory'
         import_date:
           type: string
           format: date

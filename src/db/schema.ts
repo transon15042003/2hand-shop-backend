@@ -136,7 +136,6 @@ export const batches = pgTable('batches', {
   id: varchar('id', { length: 50 }).primaryKey(),
   code: varchar('code', { length: 50 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
-  category: itemCategoryEnum('category').notNull(),
   importDate: date('import_date').notNull(),
   initialCapital: integer('initial_capital').notNull(),
   processingCost: integer('processing_cost').notNull().default(0),

@@ -13,15 +13,12 @@ import { canChangeItemStatus, draftProblems, publishProblems } from '../utils/it
 import { toAdminDetail, toAdminSummary, upsertBodyToRow } from '../utils/item-mapper.util.js';
 import { appendTimeline, toAdminOrderDetail, toAdminOrderSummary } from '../utils/order-mapper.util.js';
 import { depositWasReceived } from '../utils/deposit-status.util.js';
-import { toBatchSummary } from '../utils/batch-mapper.util.js';
+import { emptyBatchStats, toBatchSummary } from '../utils/batch-mapper.util.js';
 import type { CashFlowPeriod } from '../utils/cash-flow.util.js';
 
-function newItemId() {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, '0');
-  return `KN${stamp}-${rand}`;
+async function nextItemId(batchCode: string) {
+  const seq = await batchRepository.nextItemSeq(batchCode);
+  return `${batchCode}-${String(seq).padStart(3, '0')}`;
 }
 
 async function resolveBatchId(ref: string): Promise<string> {
@@ -145,8 +142,14 @@ export class AdminService {
 
     const row = upsertBodyToRow(body);
     row.batchId = await resolveBatchId(row.batchId);
+    const batch = await batchRepository.findById(row.batchId);
+    if (!batch) {
+      throw new AppError('Không tìm thấy kiện hàng', HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, {
+        batch_id: 'Mã kiện không tồn tại.',
+      });
+    }
     const created = await itemRepository.create({
-      id: newItemId(),
+      id: await nextItemId(batch.code),
       ...row,
     });
     return toAdminDetail(created);
@@ -802,7 +805,7 @@ export class AdminService {
     const rows = await batchRepository.findAll();
     const stats = await batchRepository.statsForBatches(rows.map((r) => r.id));
     const summaries = rows.map((r) => {
-      const s = toBatchSummary(r, stats.get(r.id) ?? { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 });
+      const s = toBatchSummary(r, stats.get(r.id) ?? emptyBatchStats());
       if (s.status !== r.status && s.is_broken_even) {
         void batchRepository.update(r.id, { status: 'break_even' });
       }
@@ -826,10 +829,7 @@ export class AdminService {
       throw new AppError('Không tìm thấy kiện hàng', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
     }
     const stats = await batchRepository.statsForBatches([row.id]);
-    const summary = toBatchSummary(
-      row,
-      stats.get(row.id) ?? { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 }
-    );
+    const summary = toBatchSummary(row, stats.get(row.id) ?? emptyBatchStats());
     if (summary.status !== row.status && summary.is_broken_even) {
       await batchRepository.update(row.id, { status: 'break_even' });
     }
@@ -843,7 +843,6 @@ export class AdminService {
   async createBatch(data: {
     code: string;
     name: string;
-    category: string;
     import_date: string;
     initial_capital: number;
     processing_cost: number;
@@ -860,7 +859,6 @@ export class AdminService {
       id: code,
       code,
       name: data.name.trim(),
-      category: data.category as any,
       importDate: data.import_date,
       initialCapital: data.initial_capital,
       processingCost: data.processing_cost ?? 0,
@@ -878,7 +876,7 @@ export class AdminService {
       });
     }
 
-    return toBatchSummary(created, { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 });
+    return toBatchSummary(created, emptyBatchStats());
   }
 
   async getSettings() {

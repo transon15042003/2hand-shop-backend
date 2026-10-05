@@ -1,25 +1,8 @@
 import { z } from 'zod';
 
-const itemCategory = z.enum([
-  't_shirts',
-  'shirts',
-  'sweaters',
-  'jackets',
-  'blazers',
-  'pants',
-  'shorts',
-  'skirts',
-  'dresses',
-  'bags',
-  'scarves',
-  'hats',
-  'accessories',
-]);
-
 export const createBatchBodySchema = z.object({
   code: z.string().min(1, 'Nhập mã kiện.').transform((s) => s.trim().toUpperCase()),
   name: z.string().min(1, 'Nhập tên kiện.'),
-  category: itemCategory,
   import_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày nhập không hợp lệ (YYYY-MM-DD).'),
   initial_capital: z.number().int().min(0, 'Vốn kiện phải ≥ 0.'),
   processing_cost: z.number().int().min(0, 'Chi phí xử lý phải ≥ 0.').default(0),
