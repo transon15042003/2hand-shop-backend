@@ -23,8 +23,8 @@
 └─────────────────────┘
 
 Planned / out of MVP:
-  · Object storage — chỉ lưu URL ảnh trong DB
-  · Redis / BullMQ — chưa; hold expiry = lazy-check (+ cron sau)
+  · Object storage — URL ảnh trong DB (+ Vercel Blob upload)
+  · Redis / BullMQ — chưa; hold expiry = lazy-check + in-process/CLI job (ADR 007)
   · Payment gateway webhook — chưa; cọc/COD xác nhận tay
 ```
 

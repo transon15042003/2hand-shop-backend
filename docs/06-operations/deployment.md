@@ -13,6 +13,7 @@ Target điển hình: Render / Railway / Fly.io (Node web service).
 
 Bắt buộc: `DATABASE_URL`, `JWT_SECRET`, `ADMIN_SESSION_TOKEN`, `CORS_ORIGIN`, `NODE_ENV=production`, `ADMIN_PASSWORD` (mạnh).  
 Upload ảnh admin: `BLOB_READ_WRITE_TOKEN` (Vercel Blob).  
+Hold expire: in-process `HOLD_EXPIRE_INTERVAL_MS` (mặc định 3 phút) hoặc Cron Job chạy `pnpm run job:expire-holds`.  
 Cookie Secure khi HTTPS. Tên biến / cách lấy: [`.env.example`](../../.env.example).
 
 ## CI gợi ý

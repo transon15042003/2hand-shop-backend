@@ -12,7 +12,10 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "job:expire-holds": "tsx scripts/run-hold-expire.ts",
+    "check:hold-expire": "tsx scripts/check-hold-expire-job.ts",
+    "check:openapi-contract": "tsx scripts/check-openapi-contract.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

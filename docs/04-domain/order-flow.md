@@ -37,7 +37,7 @@ Không nhảy cóc (vd `new → shipping`). Sai → `INVALID_TRANSITION` 400.
 - `holdExpiresAt = now + holdMinutes` (snapshot).
 - Hết hạn + `depositStatus = pending` → `cancelled`, nhả món.
 - Hết hạn + `not_required` | `received` → auto `confirmed`.
-- Cơ chế: lazy-check khi đọc + (sau) cron 2–5 phút.
+- Cơ chế: lazy-check khi đọc + **in-process scheduler** (`HOLD_EXPIRE_INTERVAL_MS`, mặc định 3 phút) và CLI `pnpm run job:expire-holds` (cron PaaS).
 
 ## Extend hold
 

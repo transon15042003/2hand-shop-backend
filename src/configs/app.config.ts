@@ -9,4 +9,6 @@ export const appConfig = {
   adminSessionToken: process.env.ADMIN_SESSION_TOKEN || 'twohand_admin_token_2026',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
+  /** Hold expire poll interval. Default 3 minutes; set 0 to disable in-process scheduler. */
+  holdExpireIntervalMs: parseInt(process.env.HOLD_EXPIRE_INTERVAL_MS ?? '180000', 10),
 };
