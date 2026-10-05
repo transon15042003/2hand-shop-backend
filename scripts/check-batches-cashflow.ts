@@ -56,7 +56,6 @@ async function main() {
     body: JSON.stringify({
       code,
       name: 'Kiện test cashflow',
-      category: 't_shirts',
       import_date: new Date().toISOString().slice(0, 10),
       initial_capital: 1000000,
       processing_cost: 50000,
@@ -76,7 +75,6 @@ async function main() {
     body: JSON.stringify({
       code,
       name: 'Dup',
-      category: 't_shirts',
       import_date: '2026-10-01',
       initial_capital: 1,
       processing_cost: 0,

@@ -77,7 +77,6 @@ async function main() {
         'id',
         'code',
         'name',
-        'category',
         'import_date',
         'initial_capital',
         'processing_cost',
@@ -86,8 +85,11 @@ async function main() {
         'sold_items_count',
         'total_revenue',
         'break_even_target',
+        'remaining_to_break_even',
         'is_broken_even',
         'status',
+        'categories',
+        'item_status_counts',
       ],
       'BatchSummary'
     );

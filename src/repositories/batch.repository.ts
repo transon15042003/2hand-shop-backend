@@ -1,7 +1,7 @@
 import { db } from '../configs/database.js';
 import { batches, items, orderItems, orders } from '../db/schema.js';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
-import type { BatchStats } from '../utils/batch-mapper.util.js';
+import { and, desc, eq, inArray, like, sql } from 'drizzle-orm';
+import { emptyBatchStats, type BatchStats } from '../utils/batch-mapper.util.js';
 
 export class BatchRepository {
   async findAll() {
@@ -42,10 +42,24 @@ export class BatchRepository {
     return updated;
   }
 
+  async nextItemSeq(batchCode: string): Promise<number> {
+    const prefix = `${batchCode}-`;
+    const rows = await db
+      .select({ id: items.id })
+      .from(items)
+      .where(like(items.id, `${prefix}%`));
+    let max = 0;
+    for (const row of rows) {
+      const suffix = row.id.slice(prefix.length);
+      if (/^\d+$/.test(suffix)) max = Math.max(max, Number(suffix));
+    }
+    return max + 1;
+  }
+
   async statsForBatches(batchIds: string[]): Promise<Map<string, BatchStats>> {
     const map = new Map<string, BatchStats>();
     for (const id of batchIds) {
-      map.set(id, { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 });
+      map.set(id, emptyBatchStats());
     }
     if (!batchIds.length) return map;
 
@@ -53,6 +67,9 @@ export class BatchRepository {
       .select({
         batchId: items.batchId,
         total: sql<number>`count(*)`,
+        draft: sql<number>`count(*) filter (where ${items.status} = 'draft')`,
+        shelf: sql<number>`count(*) filter (where ${items.status} = 'shelf')`,
+        reserved: sql<number>`count(*) filter (where ${items.status} = 'reserved')`,
         sold: sql<number>`count(*) filter (where ${items.status} = 'sold')`,
       })
       .from(items)
@@ -61,10 +78,40 @@ export class BatchRepository {
 
     for (const row of counts) {
       if (!row.batchId) continue;
-      const cur = map.get(row.batchId) ?? { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 };
+      const cur = map.get(row.batchId) ?? emptyBatchStats();
       cur.totalItemsCount = Number(row.total);
       cur.soldItemsCount = Number(row.sold);
+      cur.itemStatusCounts = {
+        draft: Number(row.draft),
+        shelf: Number(row.shelf),
+        reserved: Number(row.reserved),
+        sold: Number(row.sold),
+      };
       map.set(row.batchId, cur);
+    }
+
+    const categoryRows = await db
+      .select({
+        batchId: items.batchId,
+        category: items.category,
+        count: sql<number>`count(*)`,
+      })
+      .from(items)
+      .where(inArray(items.batchId, batchIds))
+      .groupBy(items.batchId, items.category);
+
+    const byBatch = new Map<string, { category: string; count: number }[]>();
+    for (const row of categoryRows) {
+      if (!row.batchId) continue;
+      const list = byBatch.get(row.batchId) ?? [];
+      list.push({ category: row.category, count: Number(row.count) });
+      byBatch.set(row.batchId, list);
+    }
+    for (const [batchId, list] of byBatch) {
+      list.sort((a, b) => b.count - a.count);
+      const cur = map.get(batchId) ?? emptyBatchStats();
+      cur.categories = list.map((x) => x.category);
+      map.set(batchId, cur);
     }
 
     const revenue = await db
@@ -80,7 +127,7 @@ export class BatchRepository {
 
     for (const row of revenue) {
       if (!row.batchId) continue;
-      const cur = map.get(row.batchId) ?? { totalItemsCount: 0, soldItemsCount: 0, totalRevenue: 0 };
+      const cur = map.get(row.batchId) ?? emptyBatchStats();
       cur.totalRevenue = Number(row.revenue);
       map.set(row.batchId, cur);
     }
