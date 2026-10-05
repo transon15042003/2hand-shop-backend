@@ -188,8 +188,27 @@ export class AdminController {
 
   async getCashFlowSummary(req: Request, res: Response, next: NextFunction) {
     try {
-      const summary = await adminService.getCashFlowSummary();
+      const period = (req.query.period as 'day' | 'week' | 'month') || 'week';
+      const summary = await adminService.getCashFlowSummary(period);
       return res.status(HttpStatus.OK).json(summary);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async listReconciliations(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sessions = await adminService.listReconciliations();
+      return res.status(HttpStatus.OK).json(sessions);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createReconciliation(req: Request, res: Response, next: NextFunction) {
+    try {
+      const session = await adminService.createReconciliation(req.body);
+      return res.status(HttpStatus.CREATED).json(session);
     } catch (error) {
       next(error);
     }
@@ -197,8 +216,17 @@ export class AdminController {
 
   async getBatches(req: Request, res: Response, next: NextFunction) {
     try {
-      const batchList = await adminService.getBatches();
-      return res.status(HttpStatus.OK).json({ batches: batchList });
+      const result = await adminService.getBatches();
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getBatchDetail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const batch = await adminService.getBatchDetail(req.params.id);
+      return res.status(HttpStatus.OK).json(batch);
     } catch (error) {
       next(error);
     }

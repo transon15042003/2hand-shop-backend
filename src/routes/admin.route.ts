@@ -15,6 +15,11 @@ import {
   updateOrderStatusBodySchema,
   updatePaymentBodySchema,
 } from '../dtos/admin-order.dto.js';
+import {
+  cashFlowSummaryQuerySchema,
+  createBatchBodySchema,
+  createReconciliationBodySchema,
+} from '../dtos/batch.dto.js';
 
 const router = Router();
 
@@ -62,9 +67,24 @@ router.patch('/orders/:id/payment', validate({ body: updatePaymentBodySchema }),
   adminController.updatePayment(req, res, next)
 );
 
-router.get('/cash-flow/summary', (req, res, next) => adminController.getCashFlowSummary(req, res, next));
+router.get(
+  '/cash-flow/summary',
+  validate({ query: cashFlowSummaryQuerySchema }),
+  (req, res, next) => adminController.getCashFlowSummary(req, res, next)
+);
+router.get('/cash-flow/reconciliations', (req, res, next) =>
+  adminController.listReconciliations(req, res, next)
+);
+router.post(
+  '/cash-flow/reconciliations',
+  validate({ body: createReconciliationBodySchema }),
+  (req, res, next) => adminController.createReconciliation(req, res, next)
+);
 router.get('/batches', (req, res, next) => adminController.getBatches(req, res, next));
-router.post('/batches', (req, res, next) => adminController.createBatch(req, res, next));
+router.post('/batches', validate({ body: createBatchBodySchema }), (req, res, next) =>
+  adminController.createBatch(req, res, next)
+);
+router.get('/batches/:id', (req, res, next) => adminController.getBatchDetail(req, res, next));
 router.get('/settings', (req, res, next) => adminController.getSettings(req, res, next));
 router.put('/settings', validate({ body: updateSettingsSchema }), (req, res, next) =>
   adminController.updateSettings(req, res, next)
