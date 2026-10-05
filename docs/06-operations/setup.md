@@ -21,6 +21,7 @@ cp .env.example .env
 | `ADMIN_SESSION_TOKEN` | Secret admin session |
 | `CORS_ORIGIN` | Origin Frontend (vd `http://localhost:3000`) |
 | `SEED_CUSTOMER_PASSWORD` | (optional) mật khẩu customer seed; default `123456` |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob — bắt buộc cho `POST /api/admin/uploads` (tạo store + token trên Vercel) |
 
 Chuẩn tên biến = `.env.example`. README/docs cũ nhắc tên khác → bỏ qua.
 
