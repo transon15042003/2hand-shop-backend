@@ -63,6 +63,7 @@ export const paymentMethodEnum = pgEnum('payment_method', [
 
 export const paymentStatusEnum = pgEnum('payment_status', [
   'unpaid',
+  'pending_cod',
   'partial',
   'paid',
   'refunded',

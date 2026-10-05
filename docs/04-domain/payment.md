@@ -9,7 +9,7 @@ MVP **không** có payment gateway webhook. Thu tiền = chuyển khoản thủ 
 1. `GET /orders/deposit-check?phone=` → có cần cọc không (không lộ lịch sử đơn).
 2. Tạo đơn: nếu cần → `depositStatus = pending`, `amountDue = total - depositAmount`.
 3. Khách CK theo `shop_settings` bank fields (snapshot / FE hiển thị).
-4. Admin `POST /admin/orders/:id/confirm-deposit` → `received`, ghi `cash_flow_entries` income category `deposit`.
+4. Admin `PATCH /admin/orders/:id/deposit` → DB `received` (API trả `paid`), ghi `cash_flow_entries` income category `deposit`. Không tự confirm đơn.
 5. Complete → cọc đã nhận vẫn theo luật hoàn tất; enum BE dùng `received` (không có `applied` — ADR [008](../adr/008-deposit-status-enum-alignment.md)).
 
 ### COD
@@ -27,7 +27,7 @@ MVP **không** có payment gateway webhook. Thu tiền = chuyển khoản thủ 
 Chưa có header `Idempotency-Key` toàn cục. An toàn hiện tại:
 
 - Tạo đơn: khóa item — lần 2 cùng món → 409, không double-reserve.
-- `confirm-deposit` / `complete` / `ship`: service phải **no-op hoặc reject** nếu state đã qua (không ghi cash-flow trùng). Khi implement/sửa: kiểm tra status trước khi insert `cash_flow_entries`.
+- `deposit` / `fulfill` / `status` / `payment`: service phải **reject** nếu state đã qua (không ghi cash-flow trùng). Kiểm tra status trước khi insert `cash_flow_entries`.
 
 Khi thêm cổng thanh toán sau này: bắt buộc idempotency key + bảng event webhook unique.
 

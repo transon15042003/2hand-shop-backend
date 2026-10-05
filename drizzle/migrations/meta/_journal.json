@@ -15,6 +15,13 @@
       "when": 1791235200000,
       "tag": "0001_item_condition_images",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791321600000,
+      "tag": "0002_payment_pending_cod",
+      "breakpoints": true
     }
   ]
 }
