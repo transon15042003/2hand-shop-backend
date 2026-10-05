@@ -1,6 +1,6 @@
 import { db } from '../configs/database.js';
 import { items, orders, orderItems } from '../db/schema.js';
-import { eq, inArray, asc } from 'drizzle-orm';
+import { eq, inArray, asc, and, lt, isNotNull } from 'drizzle-orm';
 import { settingRepository } from '../repositories/setting.repository.js';
 import { orderRepository } from '../repositories/order.repository.js';
 import { AppError } from '../middlewares/error.middleware.js';
@@ -67,6 +67,35 @@ export class OrderService {
     }
 
     return order;
+  }
+
+  /**
+   * Background / cron scan (ADR 007): all `new` orders past hold_expires_at.
+   * Idempotent with lazy-check — safe if multiple workers overlap.
+   */
+  async expireAllDueHolds(): Promise<{ scanned: number; cancelled: number; confirmed: number }> {
+    const due = await db
+      .select({
+        orderCode: orders.orderCode,
+        depositStatus: orders.depositStatus,
+      })
+      .from(orders)
+      .where(
+        and(eq(orders.orderStatus, 'new'), isNotNull(orders.holdExpiresAt), lt(orders.holdExpiresAt, new Date()))
+      )
+      .orderBy(asc(orders.holdExpiresAt));
+
+    let cancelled = 0;
+    let confirmed = 0;
+
+    for (const row of due) {
+      const updated = await this.applyHoldExpiry(row.orderCode);
+      if (!updated || updated.orderCode !== row.orderCode) continue;
+      if (updated.orderStatus === 'cancelled') cancelled += 1;
+      else if (updated.orderStatus === 'confirmed') confirmed += 1;
+    }
+
+    return { scanned: due.length, cancelled, confirmed };
   }
 
   private mapConfirmation(

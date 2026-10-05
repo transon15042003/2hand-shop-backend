@@ -23,7 +23,7 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 | [`order-concurrency`](./order-concurrency/) | FOR UPDATE + hold + deposit check — **xong** |
 | [`order-fulfillment`](./order-fulfillment/) | Confirm/fulfill/status/deposit — **xong** (local verified) |
 | [`batches-cashflow`](./batches-cashflow/) | Batches + cash-flow summary — **xong** (local verified) |
-| `hold-jobs-contract` | Expire job + OpenAPI contract tests |
+| [`hold-jobs-contract`](./hold-jobs-contract/) | Expire job + OpenAPI contract tests — **xong** (local verified) |
 | `production-hardening` | Helmet, rate limit, deploy |
 | `openapi-fe-sync` | Đồng bộ enum/contract với Frontend |
 
