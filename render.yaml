@@ -1,5 +1,6 @@
 # Exported Render Blueprint — sync/env secrets in Dashboard after first deploy.
 # Docs: docs/06-operations/deployment.md
+# Free tier sleeps after 15m idle — keep-alive via GitHub Actions / UptimeRobot → /api/ready
 
 services:
   - type: web
@@ -9,6 +10,7 @@ services:
     region: singapore
     rootDir: .
     buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    # Free: no preDeployCommand — migrate on each cold start (paid can split).
     startCommand: pnpm run db:migrate && pnpm run start
     healthCheckPath: /api/health
     envVars:

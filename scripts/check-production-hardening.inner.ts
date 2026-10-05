@@ -32,6 +32,11 @@ async function main() {
       'helmet header present'
     );
 
+    const ready = await fetch(`${base}/ready`);
+    assert(ready.status === 200, `ready ${ready.status}`);
+    const readyBody = (await ready.json()) as { status: string };
+    assert(readyBody.status === 'ready', `ready body ${readyBody.status}`);
+
     const body = JSON.stringify({ email: 'rate@test.local', password: 'wrong-password-xx' });
     const headers = { 'Content-Type': 'application/json' };
 
