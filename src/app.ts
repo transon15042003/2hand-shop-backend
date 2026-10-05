@@ -20,9 +20,12 @@ export function createApp() {
     })
   );
 
-  const corsOrigins = appConfig.isDev
+  const corsOrigins = (appConfig.isDev
     ? [appConfig.corsOrigin, 'http://localhost:3000', 'http://127.0.0.1:3000']
-    : [appConfig.corsOrigin];
+    : appConfig.corsOrigin.split(',')
+  )
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   app.use(
     cors({
