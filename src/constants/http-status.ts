@@ -49,7 +49,7 @@ export const ErrorCode = {
   UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',
 } as const;
 
-export const SESSION_COOKIE_NAME = '2hand_customer_session';
+export const SESSION_COOKIE_NAME = 'hk_small_store_customer_session';
 export const ADMIN_COOKIE_NAME = 'admin_session';
 export const SESSION_DURATION_DAYS = 400; // ADR 006: sliding 400 days
 /** Cookie Max-Age in seconds (400 days). Express `maxAge` option needs ms. */

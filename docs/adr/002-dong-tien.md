@@ -1,7 +1,7 @@
 # 002 — Thiết kế mô hình quản lý dòng tiền và đối soát
 
 Trạng thái: Đã chốt ngày 2026-09-27.  
-Nguồn: Quyết định bổ sung năng lực quản trị tài chính cho chủ shop một người. Đồng bộ với [ADR 002 Frontend](../../../2hand-shop/docs/adr/002-dong-tien.md).
+Nguồn: Quyết định bổ sung năng lực quản trị tài chính cho chủ shop một người. Đồng bộ với [ADR 002 Frontend](../../../HK Small Store/docs/adr/002-dong-tien.md).
 
 ---
 

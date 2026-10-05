@@ -1,7 +1,7 @@
 # 006 — Quản lý phiên đăng nhập khách hàng lâu dài (Long-lived Session)
 
 Trạng thái: Đã chốt ngày 2026-10-03.  
-Nguồn: Yêu cầu của chủ shop Son về việc khách mua hàng không phải đăng nhập lại nhiều lần. Đồng bộ với [ADR 006 Frontend](../../../2hand-shop/docs/adr/006-customer-session.md).
+Nguồn: Yêu cầu của chủ shop Son về việc khách mua hàng không phải đăng nhập lại nhiều lần. Đồng bộ với [ADR 006 Frontend](../../../HK Small Store/docs/adr/006-customer-session.md).
 
 ---
 
@@ -34,8 +34,8 @@ CREATE TABLE customer_sessions (
    - Lưu `tokenHash` vào bảng `customer_sessions` với `expiresAt = now() + 400 ngày`.
    - Gửi `rawToken` về trình duyệt qua Set-Cookie.
 
-### 2.3 Thuộc tính Cookie `2hand_customer_session`
-- **Name**: `2hand_customer_session`
+### 2.3 Thuộc tính Cookie `hk_small_store_customer_session`
+- **Name**: `hk_small_store_customer_session`
 - **HttpOnly**: `true` (Javascript phía client không thể đọc, chặn 100% XSS đánh cắp phiên).
 - **SameSite**: `Lax` (Bảo vệ chống CSRF, đồng thời cho phép giữ phiên khi khách bấm link giới thiệu từ Facebook/Zalo mở sang web shop).
 - **Secure**: `process.env.NODE_ENV === 'production'` (Bắt buộc truyền qua HTTPS trên môi trường production).

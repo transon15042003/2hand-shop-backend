@@ -1,9 +1,9 @@
 ---
-description: 2hand-shop-backend rules for agents
+description: hk-small-store-backend rules for agents
 alwaysApply: true
 ---
 
-# 2hand-shop-backend
+# hk-small-store-backend
 
 Read [`AGENTS.md`](../../AGENTS.md) before editing. Details under [`docs/`](../../docs/).
 

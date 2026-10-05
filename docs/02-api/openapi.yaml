@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
-  title: 2hand-shop API Contract
+  title: HK Small Store API Contract
   version: 1.0.0
   license:
     name: MIT
   description: |
-    API Contract chuẩn hóa cho hệ thống cửa hàng đồ si tuyển chọn độc bản (1-of-1) 2hand-shop.
+    API Contract chuẩn hóa cho hệ thống cửa hàng đồ si tuyển chọn độc bản (1-of-1) HK Small Store.
     Tài liệu này đóng vai trò Single Source of Truth (SSOT) cho việc phát triển Frontend độc lập với Mock Service (MSW) và Backend sau này.
 
     Quy chuẩn nghiệp vụ cốt lõi:
@@ -365,7 +365,7 @@ paths:
           description: Xác thực thành công, tài khoản đã được kích hoạt
           headers:
             Set-Cookie:
-              description: Cấp phiên `2hand_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
+              description: Cấp phiên `hk_small_store_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
               schema:
                 type: string
           content:
@@ -427,7 +427,7 @@ paths:
       summary: Đăng nhập tài khoản khách hàng
       description: |
         Đăng nhập bằng Email hoặc Số điện thoại kèm Mật khẩu. Yêu cầu tài khoản đã xác thực email.
-        Phiên lâu dài (ADR 006): trả cookie httpOnly `2hand_customer_session` (400 ngày, gia hạn khi dùng); khách ở trạng thái đăng nhập trên thiết bị đó tới khi bấm Đăng xuất.
+        Phiên lâu dài (ADR 006): trả cookie httpOnly `hk_small_store_customer_session` (400 ngày, gia hạn khi dùng); khách ở trạng thái đăng nhập trên thiết bị đó tới khi bấm Đăng xuất.
       tags:
         - Customer Auth
       security: []
@@ -442,7 +442,7 @@ paths:
           description: Đăng nhập thành công
           headers:
             Set-Cookie:
-              description: Cấp phiên `2hand_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
+              description: Cấp phiên `hk_small_store_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
               schema:
                 type: string
           content:
@@ -620,7 +620,7 @@ paths:
           description: Đăng xuất thành công
           headers:
             Set-Cookie:
-              description: Xóa cookie phiên `2hand_customer_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`.
+              description: Xóa cookie phiên `hk_small_store_customer_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`.
               schema:
                 type: string
           content:
@@ -724,7 +724,7 @@ paths:
           description: Đăng nhập thành công
           headers:
             Set-Cookie:
-              description: Cấp phiên `2hand_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
+              description: Cấp phiên `hk_small_store_customer_session=<token>; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax` (+ `Secure` ở production). ADR 006.
               schema:
                 type: string
           content:
@@ -1807,7 +1807,7 @@ components:
     CustomerSessionCookie:
       type: apiKey
       in: cookie
-      name: 2hand_customer_session
+      name: hk_small_store_customer_session
       description: |
         Phiên khách hàng của web (ADR 006): cookie httpOnly, `SameSite=Lax`, `Secure` ở production, `Path=/`, `Max-Age=34560000` (400 ngày, mức tối đa trình duyệt cho phép).
         Gia hạn trượt: mỗi lần khách dùng web, cookie được cấp lại thêm 400 ngày. Không có hết hạn theo phiên trình duyệt hay theo thời gian không hoạt động; chỉ hết khi khách bấm Đăng xuất (thiết bị đó), Đăng xuất khỏi mọi thiết bị, đổi mật khẩu (các thiết bị khác) hoặc 400 ngày không vào web.
@@ -3314,7 +3314,7 @@ components:
         email:
           type: string
           format: email
-          example: "khachhang@2handshop.vn"
+          example: "khachhang@hksmallstore.vn"
         password:
           type: string
           format: password
@@ -3355,7 +3355,7 @@ components:
         email:
           type: string
           format: email
-          example: "khachhang@2handshop.vn"
+          example: "khachhang@hksmallstore.vn"
         code:
           type: string
           minLength: 6
@@ -3371,7 +3371,7 @@ components:
         identifier:
           type: string
           description: "Email hoặc số điện thoại của khách hàng"
-          example: "khachhang@2handshop.vn"
+          example: "khachhang@hksmallstore.vn"
         password:
           type: string
           format: password
@@ -3413,7 +3413,7 @@ components:
         email:
           type: string
           format: email
-          example: "khachhang@2handshop.vn"
+          example: "khachhang@hksmallstore.vn"
         is_verified:
           type: boolean
           example: true

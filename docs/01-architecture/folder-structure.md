@@ -1,7 +1,7 @@
 # Folder structure
 
 ```
-2hand-shop-backend/
+hk-small-store-backend/
 ├── AGENTS.md
 ├── CLAUDE.md                    # @AGENTS.md
 ├── .cursor/rules/               # alwaysApply agent rules

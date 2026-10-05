@@ -1,13 +1,13 @@
 # 000 — Phạm vi nghiệp vụ & Ranh giới trách nhiệm Backend
 
 Trạng thái: Đã chốt ngày 2026-09-26.  
-Nguồn: Phiên làm việc định hình phạm vi cửa hàng với chủ shop. Đồng bộ với [000 của Frontend](../../../2hand-shop/docs/adr/000-pham-vi.md).
+Nguồn: Phiên làm việc định hình phạm vi cửa hàng với chủ shop. Đồng bộ với [000 của Frontend](../../../HK Small Store/docs/adr/000-pham-vi.md).
 
 ---
 
 ## 1. Bối cảnh & Ranh giới Hệ thống
 
-Dự án Backend đóng vai trò là hạt nhân xử lý dữ liệu và logic nghiệp vụ cho cửa hàng thời trang đồ cũ 2hand-shop. Hệ thống được thiết kế phục vụ một mô hình kinh doanh đặc thù: **Cửa hàng một chủ tự vận hành, bán các món đồ si tuyển chọn độc bản (1-of-1)**.
+Dự án Backend đóng vai trò là hạt nhân xử lý dữ liệu và logic nghiệp vụ cho cửa hàng thời trang đồ cũ HK Small Store. Hệ thống được thiết kế phục vụ một mô hình kinh doanh đặc thù: **Cửa hàng một chủ tự vận hành, bán các món đồ si tuyển chọn độc bản (1-of-1)**.
 
 ### Ranh giới trách nhiệm giữa Frontend và Backend
 - **Frontend Next.js**: Chịu trách nhiệm hiển thị giao diện, điều hướng người dùng, quản lý giỏ hàng cục bộ (local storage), kiểm tra sơ bộ định dạng dữ liệu (client-side validation), hiển thị đếm ngược thời gian và hỗ trợ người dùng thao tác mượt mà.

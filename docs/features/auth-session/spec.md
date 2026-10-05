@@ -8,7 +8,7 @@ FE đã tắt mock và gọi OpenAPI paths (`/auth/verify-email`, `/auth/session
 
 - **In**:
   - Customer: register, verify-email (`code`), resend-code, login, logout, logout-all, session (luôn 200), GET/PUT `/auth/me`, change-password
-  - Cookie `2hand_customer_session`: HttpOnly, SameSite=Lax, Path=/, Max-Age=34560000 (+ Secure prod); token hash SHA-256 trong `customer_sessions`
+  - Cookie `hk_small_store_customer_session`: HttpOnly, SameSite=Lax, Path=/, Max-Age=34560000 (+ Secure prod); token hash SHA-256 trong `customer_sessions`
   - Sliding expire: chỉ refresh DB + cookie khi `last_seen_at` > 1 giờ
   - Admin: `POST /admin/auth/login|logout` trả `{ token, user }` khớp contract
   - Response shape snake_case theo OpenAPI (`CustomerProfile`, `CustomerAuthResponse`, …)

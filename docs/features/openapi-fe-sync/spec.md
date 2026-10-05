@@ -24,5 +24,5 @@ OpenAPI (cả BE và FE) vẫn dùng `deposit_status: paid | applied` trong khi 
 ## References
 
 - ADR [008](../../adr/008-deposit-status-enum-alignment.md)
-- OpenAPI: `docs/02-api/openapi.yaml` ↔ `2hand-shop/contracts/openapi.yaml`
+- OpenAPI: `docs/02-api/openapi.yaml` ↔ `HK Small Store/contracts/openapi.yaml`
 - Schema: `depositStatusEnum`

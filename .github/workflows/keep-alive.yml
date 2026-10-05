@@ -22,7 +22,7 @@ jobs:
           URL: ${{ secrets.BACKEND_READY_URL }}
         run: |
           if [ -z "$URL" ]; then
-            echo "Set repo secret BACKEND_READY_URL (e.g. https://2hand-shop-api.onrender.com/api/ready)"
+            echo "Set repo secret BACKEND_READY_URL (e.g. https://hk-small-store-api.onrender.com/api/ready)"
             exit 1
           fi
           # Long timeout: first ping after sleep can take ~60s while Render spins up.

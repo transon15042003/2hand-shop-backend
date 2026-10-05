@@ -86,7 +86,7 @@ Khi đặt hàng, các giá trị liên quan **snapshot** vào `orders`. Khách 
 
 Template kiểu marketplace dùng từ khác — map sang domain này:
 
-| Template / marketplace | 2hand-shop |
+| Template / marketplace | HK Small Store |
 |---|---|
 | Listing | Item |
 | Escrow | Deposit (cọc thủ công) |
@@ -100,7 +100,7 @@ Template kiểu marketplace dùng từ khác — map sang domain này:
 ## Lệch Frontend (cố ý ghi nhận)
 
 SSOT **repo này** = `src/db/schema.ts` + [`../02-api/openapi.yaml`](../02-api/openapi.yaml).  
-FE (`2hand-shop`) có thể khác — đồng bộ qua PR OpenAPI riêng, **không** sửa docs BE cho “giống FE” nếu schema chưa đổi.
+FE (`hk-small-store`) có thể khác — đồng bộ qua PR OpenAPI riêng, **không** sửa docs BE cho “giống FE” nếu schema chưa đổi.
 
 | Chủ đề | Backend (SSOT) | Frontend (tham chiếu docs/contract) |
 |---|---|---|

@@ -1,13 +1,13 @@
 # 004 — Nghiệp vụ đặt cọc đơn đầu tiên và hạch toán phí trả hàng
 
 Trạng thái: Đã chốt ngày 2026-10-03. Cập nhật theo [ADR 005](005-configurable-business-settings.md). **§2.2 (`deposit_status` enum) superseded by [ADR 008](./008-deposit-status-enum-alignment.md)** (2026-10-05).  
-Nguồn: Thỏa thuận quy tắc kinh doanh với chủ shop Son. Đồng bộ với [ADR 004 của Frontend](../../../2hand-shop/docs/adr/004-deposit-and-return-fee.md).
+Nguồn: Thỏa thuận quy tắc kinh doanh với chủ shop Son. Đồng bộ với [ADR 004 của Frontend](../../../HK Small Store/docs/adr/004-deposit-and-return-fee.md).
 
 ---
 
 ## 1. Bản chất Nghiệp vụ
 
-Do đặc thù bán quần áo 2hand độc bản, việc khách đặt đơn ảo (boom hàng) hoặc trả hàng tùy tiện sẽ gây thiệt hại lớn cho chủ shop (món đồ bị giữ chỗ làm mất cơ hội bán cho người khác, shop phải gánh cước ship 2 chiều của bưu cục). Do đó, chủ shop áp dụng chính sách:
+Do đặc thù bán quần áo secondhand độc bản, việc khách đặt đơn ảo (boom hàng) hoặc trả hàng tùy tiện sẽ gây thiệt hại lớn cho chủ shop (món đồ bị giữ chỗ làm mất cơ hội bán cho người khác, shop phải gánh cước ship 2 chiều của bưu cục). Do đó, chủ shop áp dụng chính sách:
 1. **Cọc đơn đầu tiên**: Khách hàng mới (chưa từng có đơn hoàn tất) phải cọc trước **50.000₫**.
 2. **Khách quen được miễn cọc**: Số điện thoại hoặc tài khoản đã có ít nhất một đơn ở trạng thái `completed` được miễn cọc hoàn toàn.
 3. **Phí trả hàng**: Cho phép trả hàng trong vòng 2 ngày kể từ khi nhận, nhưng khách phải chịu phí là **50.000₫** (trừ trực tiếp vào tiền hoàn món nếu đơn có cọc, hoặc thu 50.000₫ phí ship 2 chiều nếu đơn không cọc).

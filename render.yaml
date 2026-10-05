@@ -4,7 +4,7 @@
 
 services:
   - type: web
-    name: 2hand-shop-api
+    name: hk-small-store-api
     runtime: node
     plan: free
     region: singapore

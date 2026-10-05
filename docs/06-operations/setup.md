@@ -71,6 +71,6 @@ Health: `GET http://localhost:$PORT/api/health`
 pnpm run db:seed
 ```
 
-Insert-if-missing: `shop_settings` id=1, batch mẫu, 2 items (`shelf` + `draft`), 1 customer demo (`khachhang@2handshop.vn` / `SEED_CUSTOMER_PASSWORD` hoặc `123456`).
+Insert-if-missing: `shop_settings` id=1, batch mẫu, 2 items (`shelf` + `draft`), 1 customer demo (`khachhang@hksmallstore.vn` / `SEED_CUSTOMER_PASSWORD` hoặc `123456`).
 
 **Không** chạy seed tự động trên production deploy. Admin login dùng mật khẩu `ADMIN_PASSWORD` + session `ADMIN_SESSION_TOKEN` (env), không từ bảng users.

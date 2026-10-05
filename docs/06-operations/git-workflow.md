@@ -1,6 +1,6 @@
 # Git workflow (backend)
 
-SSOT quy trình Git cho `2hand-shop-backend`. Agent và người cùng tuân thủ.  
+SSOT quy trình Git cho `hk-small-store-backend`. Agent và người cùng tuân thủ.  
 Gắn với feature ship: [`.cursor/rules/feature-ship.mdc`](../../.cursor/rules/feature-ship.mdc) và [`git-workflow.mdc`](../../.cursor/rules/git-workflow.mdc).
 
 ## Mục tiêu
@@ -70,7 +70,7 @@ Align POST /orders with OpenAPI conflict body and lazy hold expiry.
 ```
 
 - Một PR = một feature/fix. Không gộp nhiều slug trừ user yêu cầu.
-- Đổi OpenAPI → ghi rõ cần sync `2hand-shop/contracts/openapi.yaml`.
+- Đổi OpenAPI → ghi rõ cần sync `HK Small Store/contracts/openapi.yaml`.
 - Merge: **squash** mặc định (một commit sạch trên `main`). Merge commit OK nếu nhánh có nhiều commit có nghĩa.
 - Sau merge: xóa nhánh remote (GitHub option hoặc `git push origin --delete …`).
 
@@ -95,7 +95,7 @@ Align POST /orders with OpenAPI conflict body and lazy hold expiry.
 
 - Contract HTTP: BE `docs/02-api/openapi.yaml` ↔ FE `contracts/openapi.yaml`.
 - FE phụ thuộc API mới → **merge PR BE trước**, rồi PR FE; link chéo trong body.
-- FE SSOT quy trình: `2hand-shop/docs/02-conventions/git-workflow.md` (cùng mô hình trunk + squash + slug).
+- FE SSOT quy trình: `HK Small Store/docs/02-conventions/git-workflow.md` (cùng mô hình trunk + squash + slug).
 
 ## Bảo vệ `main` (khuyến nghị GitHub)
 

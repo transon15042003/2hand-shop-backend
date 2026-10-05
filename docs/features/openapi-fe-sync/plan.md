@@ -9,7 +9,7 @@ SSOT enum = schema Drizzle. Sửa OpenAPI trước, copy sang FE, rồi bỏ map
 | File | Thay đổi |
 |---|---|
 | `docs/02-api/openapi.yaml` | DepositStatus + mô tả |
-| `2hand-shop/contracts/openapi.yaml` | Copy từ BE |
+| `HK Small Store/contracts/openapi.yaml` | Copy từ BE |
 | `src/utils/deposit-status.util.ts` | Bỏ API alias `paid`/`applied` |
 | `src/utils/order-mapper.util.ts` + order.service | Trả status DB |
 | `scripts/check-order-fulfillment.ts` | Expect `received` |

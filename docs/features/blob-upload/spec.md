@@ -19,5 +19,5 @@ Contract `POST /api/admin/uploads` cần lưu file multipart lên Vercel Blob v�
 
 ## References
 
-- FE contract: `2hand-shop/contracts/openapi.yaml`
+- FE contract: `HK Small Store/contracts/openapi.yaml`
 - `src/constants/upload.ts`, `src/services/upload.service.ts`
