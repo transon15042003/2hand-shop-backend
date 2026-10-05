@@ -1,0 +1,14 @@
+---
+description: After each completed feature, commit and push before starting the next
+alwaysApply: true
+---
+
+# Feature ship gate
+
+Khi một feature trong `docs/features/<slug>/` đạt acceptance (tasks/spec tick xong, typecheck + runnable check xanh):
+
+1. **Commit** ngay — message nêu *why* (slug feature), HEREDOC; không commit `.env`/secret.
+2. **Push** `origin` branch hiện tại (`git push -u` nếu chưa track).
+3. Chỉ sau đó mới mở feature tiếp theo trong `docs/features/README.md`.
+
+Không để nhiều feature xong dồn một commit trừ khi user yêu cầu gộp. Không bắt đầu feature mới khi working tree còn diff của feature vừa xong.

@@ -12,3 +12,4 @@ Read [`AGENTS.md`](../../AGENTS.md) before editing. Details under [`docs/`](../.
 - 1-of-1 + transactions: see `docs/04-domain/order-flow.md` and `docs/03-database/transactions.md`.
 - Code/API = English; client errors + business docs = Vietnamese.
 - Do not log PII. Do not rewrite sealed ADRs without supersede.
+- Feature done → commit + push before next feature ([`feature-ship.mdc`](./feature-ship.mdc)).

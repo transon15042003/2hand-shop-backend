@@ -17,8 +17,8 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 
 | Slug | Phase roadmap |
 |---|---|
-| `db-foundation` | Schema + migrate + seed |
-| `auth-session` | Customer OTP + 400-day session + admin |
+| [`db-foundation`](./db-foundation/) | Schema + migrate + seed — **xong** (local verified) |
+| [`auth-session`](./auth-session/) | Customer OTP + 400-day session + admin — **xong** |
 | `items-module` | Public + admin items |
 | `order-concurrency` | FOR UPDATE + hold + deposit check |
 | `order-fulfillment` | Confirm/ship/complete/return/cancel |
@@ -28,3 +28,7 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 | `openapi-fe-sync` | Đồng bộ enum/contract với Frontend |
 
 Không tạo folder marketplace (`wishlist`, `buyer-seller-chat`, …) — ngoài phạm vi ADR 000.
+
+## Ship
+
+Xong 1 feature (AC + check xanh) → **commit + push** trước khi bắt đầu slug kế ([`feature-ship`](../../.cursor/rules/feature-ship.mdc)).

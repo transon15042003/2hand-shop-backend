@@ -8,6 +8,6 @@ export default defineConfig({
   out: './drizzle/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'postgresql://postgres:Linh15042003@localhost:5432/twohand_shop',
+    url: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/twohand_shop',
   },
 });

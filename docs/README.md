@@ -10,7 +10,7 @@ Bắt đầu từ [`../AGENTS.md`](../AGENTS.md). Tooling: [`../CLAUDE.md`](../C
 | [03-database](./03-database/data-model.md) | Model, Drizzle conventions, migrate, tx |
 | [04-domain](./04-domain/order-flow.md) | Item rules, order SM, payment |
 | [05-quality](./05-quality/definition-of-done.md) | Test, security, perf, DoD |
-| [06-operations](./06-operations/setup.md) | Setup, deploy, observability |
+| [06-operations](./06-operations/setup.md) | Setup, deploy, observability, [agent stack](./06-operations/agent-stack.md) |
 | [adr](./adr/) | Decision records (000–008+) |
 | [features](./features/) | Spec / plan / tasks |
 | [superpowers](./superpowers/specs/) | Agent design specs & plans |

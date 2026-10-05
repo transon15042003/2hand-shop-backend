@@ -18,6 +18,8 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     name: string;
   };
+  /** Raw session cookie/Bearer token (for logout-all / change-password). */
+  sessionToken?: string;
   isAdmin?: boolean;
 }
 

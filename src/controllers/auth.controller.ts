@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service.js';
 import { HttpStatus, SESSION_COOKIE_NAME } from '../constants/http-status.js';
-import { appConfig } from '../configs/app.config.js';
 import { AuthenticatedRequest } from '../interfaces/index.js';
+import { clearCustomerSessionCookie, setCustomerSessionCookie } from '../utils/session-cookie.util.js';
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -14,37 +14,21 @@ export class AuthController {
     }
   }
 
-  async verifyOtp(req: Request, res: Response, next: NextFunction) {
+  async verifyEmail(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, otp } = req.body;
-      const result = await authService.verifyOtp(email, otp);
-
-      if (result.sessionToken) {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 400);
-
-        res.cookie(SESSION_COOKIE_NAME, result.sessionToken, {
-          httpOnly: true,
-          secure: !appConfig.isDev,
-          sameSite: 'lax',
-          path: '/',
-          expires: expiresAt,
-        });
-      }
-
-      return res.status(HttpStatus.OK).json({
-        message: 'Xác thực tài khoản thành công',
-        customer: result.customer,
-      });
+      const { email, code } = req.body;
+      const result = await authService.verifyEmail(email, code);
+      setCustomerSessionCookie(res, result.token);
+      return res.status(HttpStatus.OK).json(result);
     } catch (error) {
       next(error);
     }
   }
 
-  async resendOtp(req: Request, res: Response, next: NextFunction) {
+  async resendCode(req: Request, res: Response, next: NextFunction) {
     try {
       const { email } = req.body;
-      const result = await authService.resendOtp(email);
+      const result = await authService.resendCode(email);
       return res.status(HttpStatus.OK).json(result);
     } catch (error) {
       next(error);
@@ -55,22 +39,8 @@ export class AuthController {
     try {
       const { identifier, password } = req.body;
       const result = await authService.login(identifier, password);
-
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 400);
-
-      res.cookie(SESSION_COOKIE_NAME, result.sessionToken, {
-        httpOnly: true,
-        secure: !appConfig.isDev,
-        sameSite: 'lax',
-        path: '/',
-        expires: expiresAt,
-      });
-
-      return res.status(HttpStatus.OK).json({
-        message: 'Đăng nhập thành công',
-        customer: result.customer,
-      });
+      setCustomerSessionCookie(res, result.token);
+      return res.status(HttpStatus.OK).json(result);
     } catch (error) {
       next(error);
     }
@@ -78,17 +48,32 @@ export class AuthController {
 
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
-      const token = req.cookies?.[SESSION_COOKIE_NAME];
-      await authService.logout(token);
+      const token = req.cookies?.[SESSION_COOKIE_NAME] || req.headers.authorization?.replace(/^Bearer\s+/i, '');
+      const result = await authService.logout(token);
+      clearCustomerSessionCookie(res);
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 
-      res.clearCookie(SESSION_COOKIE_NAME, {
-        httpOnly: true,
-        secure: !appConfig.isDev,
-        sameSite: 'lax',
-        path: '/',
-      });
+  async logoutAll(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await authService.logoutAll(req.customer!.id);
+      clearCustomerSessionCookie(res);
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 
-      return res.status(HttpStatus.OK).json({ success: true, message: 'Đã đăng xuất' });
+  async getSession(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.customer) {
+        return res.status(HttpStatus.OK).json({ customer: null });
+      }
+      const customer = await authService.getProfile(req.customer.id);
+      return res.status(HttpStatus.OK).json({ customer });
     } catch (error) {
       next(error);
     }
@@ -96,9 +81,32 @@ export class AuthController {
 
   async getMe(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      return res.status(HttpStatus.OK).json({
-        customer: req.customer,
-      });
+      const customer = await authService.getProfile(req.customer!.id);
+      return res.status(HttpStatus.OK).json(customer);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateMe(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const customer = await authService.updateProfile(req.customer!.id, req.body);
+      return res.status(HttpStatus.OK).json(customer);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async changePassword(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const { current_password, new_password } = req.body;
+      const result = await authService.changePassword(
+        req.customer!.id,
+        current_password,
+        new_password,
+        req.sessionToken!
+      );
+      return res.status(HttpStatus.OK).json(result);
     } catch (error) {
       next(error);
     }

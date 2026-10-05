@@ -3,7 +3,36 @@ import { HashUtil } from '../utils/hash.util.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
 
+type CustomerRow = NonNullable<Awaited<ReturnType<typeof customerRepository.findById>>>;
+
+export type CustomerProfile = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  is_verified: boolean;
+  has_completed_order: boolean;
+  default_shipping_address: string | null;
+  default_shipping_note: string | null;
+  created_at: string;
+};
+
 export class AuthService {
+  async toProfile(customer: CustomerRow): Promise<CustomerProfile> {
+    const hasCompleted = await customerRepository.hasCompletedOrder(customer.id);
+    return {
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      is_verified: customer.isVerified,
+      has_completed_order: hasCompleted,
+      default_shipping_address: customer.defaultShippingAddress ?? null,
+      default_shipping_note: customer.defaultShippingNote ?? null,
+      created_at: (customer.createdAt ?? new Date()).toISOString(),
+    };
+  }
+
   async register(data: {
     name: string;
     phone: string;
@@ -28,7 +57,7 @@ export class AuthService {
 
     const passwordHash = await HashUtil.hashPassword(data.password);
     const otp = HashUtil.generateOtp(6);
-    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
     const customerId = `kh-${Date.now().toString(36)}`;
 
@@ -46,53 +75,53 @@ export class AuthService {
     });
 
     return {
-      message: 'Đăng ký thành công. Vui lòng kiểm tra email để nhập mã xác thực OTP.',
-      email: data.email,
-      debugOtp: process.env.NODE_ENV === 'development' ? otp : undefined,
+      success: true,
+      message: 'Đăng ký thành công! Mã xác thực đã được gửi tới email của bạn.',
+      requires_verification: true,
+      customer_id: customerId,
+      demo_otp: process.env.NODE_ENV === 'development' ? otp : undefined,
     };
   }
 
-  async verifyOtp(email: string, otp: string) {
+  async verifyEmail(email: string, code: string) {
     const customer = await customerRepository.findByEmail(email);
     if (!customer) {
       throw new AppError('Không tìm thấy tài khoản với email này', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
     }
 
     if (customer.isVerified) {
-      return { message: 'Tài khoản đã được xác thực trước đó.' };
+      throw new AppError('Tài khoản đã được xác thực trước đó', HttpStatus.BAD_REQUEST, ErrorCode.ALREADY_VERIFIED);
     }
 
-    if (!customer.verificationOtp || customer.verificationOtp !== otp) {
-      throw new AppError('Mã OTP không chính xác', HttpStatus.BAD_REQUEST, ErrorCode.INVALID_OTP);
+    if (!customer.verificationOtp || customer.verificationOtp !== code) {
+      throw new AppError('Mã OTP không chính xác', HttpStatus.BAD_REQUEST, ErrorCode.INVALID_OTP_CODE);
     }
 
     if (customer.otpExpiresAt && customer.otpExpiresAt < new Date()) {
       throw new AppError('Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới', HttpStatus.BAD_REQUEST, ErrorCode.OTP_EXPIRED);
     }
 
-    await customerRepository.update(customer.id, {
+    const updated = await customerRepository.update(customer.id, {
       isVerified: true,
       verificationOtp: null,
       otpExpiresAt: null,
     });
 
-    const sessionToken = await customerRepository.createSession(customer.id);
-
+    const token = await customerRepository.createSession(customer.id);
     return {
-      sessionToken,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-      },
+      token,
+      customer: await this.toProfile(updated ?? customer),
     };
   }
 
-  async resendOtp(email: string) {
+  async resendCode(email: string) {
     const customer = await customerRepository.findByEmail(email);
     if (!customer) {
       throw new AppError('Không tìm thấy tài khoản với email này', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
+    }
+
+    if (customer.isVerified) {
+      throw new AppError('Tài khoản đã được xác thực trước đó', HttpStatus.BAD_REQUEST, ErrorCode.ALREADY_VERIFIED);
     }
 
     const otp = HashUtil.generateOtp(6);
@@ -104,8 +133,9 @@ export class AuthService {
     });
 
     return {
+      success: true,
       message: 'Mã xác thực mới đã được gửi tới email của bạn.',
-      debugOtp: process.env.NODE_ENV === 'development' ? otp : undefined,
+      demo_otp: process.env.NODE_ENV === 'development' ? otp : undefined,
     };
   }
 
@@ -121,23 +151,18 @@ export class AuthService {
     }
 
     if (!customer.isVerified) {
-      throw new AppError('Tài khoản chưa được xác thực email. Vui lòng nhập mã OTP', HttpStatus.UNAUTHORIZED, ErrorCode.EMAIL_NOT_VERIFIED, {
-        email: customer.email,
-      });
+      throw new AppError(
+        'Tài khoản chưa được xác thực email. Vui lòng nhập mã OTP',
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.EMAIL_NOT_VERIFIED,
+        { email: customer.email }
+      );
     }
 
-    const sessionToken = await customerRepository.createSession(customer.id);
-
+    const token = await customerRepository.createSession(customer.id);
     return {
-      sessionToken,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        defaultShippingAddress: customer.defaultShippingAddress,
-        defaultShippingNote: customer.defaultShippingNote,
-      },
+      token,
+      customer: await this.toProfile(customer),
     };
   }
 
@@ -145,7 +170,55 @@ export class AuthService {
     if (sessionToken) {
       await customerRepository.deleteSession(sessionToken);
     }
-    return { success: true };
+    return { success: true, message: 'Đã đăng xuất' };
+  }
+
+  async logoutAll(customerId: string) {
+    await customerRepository.deleteAllSessions(customerId);
+    return { success: true, message: 'Đã đăng xuất khỏi mọi thiết bị' };
+  }
+
+  async getProfile(customerId: string) {
+    const customer = await customerRepository.findById(customerId);
+    if (!customer) {
+      throw new AppError('Tài khoản không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
+    }
+    return this.toProfile(customer);
+  }
+
+  async updateProfile(
+    customerId: string,
+    data: { name: string; default_shipping_address?: string | null; default_shipping_note?: string | null }
+  ) {
+    const updated = await customerRepository.update(customerId, {
+      name: data.name,
+      defaultShippingAddress: data.default_shipping_address ?? null,
+      defaultShippingNote: data.default_shipping_note ?? null,
+    });
+    if (!updated) {
+      throw new AppError('Tài khoản không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
+    }
+    return this.toProfile(updated);
+  }
+
+  async changePassword(customerId: string, currentPassword: string, newPassword: string, keepSessionToken: string) {
+    const customer = await customerRepository.findById(customerId);
+    if (!customer) {
+      throw new AppError('Tài khoản không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
+    }
+
+    const ok = await HashUtil.comparePassword(currentPassword, customer.passwordHash);
+    if (!ok) {
+      throw new AppError('Mật khẩu hiện tại không đúng', HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, {
+        current_password: 'Mật khẩu hiện tại không đúng',
+      });
+    }
+
+    const passwordHash = await HashUtil.hashPassword(newPassword);
+    await customerRepository.update(customerId, { passwordHash });
+    await customerRepository.deleteOtherSessions(customerId, keepSessionToken);
+
+    return { success: true, message: 'Đã đổi mật khẩu.' };
   }
 }
 

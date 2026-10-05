@@ -21,7 +21,9 @@ export const ErrorCode = {
   PHONE_ALREADY_EXISTS: 'PHONE_ALREADY_EXISTS',
   EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
   INVALID_OTP: 'INVALID_OTP',
+  INVALID_OTP_CODE: 'INVALID_OTP_CODE',
   OTP_EXPIRED: 'OTP_EXPIRED',
+  ALREADY_VERIFIED: 'ALREADY_VERIFIED',
   ITEM_NOT_FOUND: 'ITEM_NOT_FOUND',
   ITEM_NOT_AVAILABLE: 'ITEM_NOT_AVAILABLE',
   OUT_OF_STOCK: 'OUT_OF_STOCK',
@@ -39,3 +41,6 @@ export const ErrorCode = {
 export const SESSION_COOKIE_NAME = '2hand_customer_session';
 export const ADMIN_COOKIE_NAME = 'admin_session';
 export const SESSION_DURATION_DAYS = 400; // ADR 006: sliding 400 days
+/** Cookie Max-Age in seconds (400 days). Express `maxAge` option needs ms. */
+export const SESSION_MAX_AGE_SEC = 34560000;
+export const SESSION_SLIDE_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour

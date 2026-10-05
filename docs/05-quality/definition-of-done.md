@@ -10,13 +10,15 @@ Một endpoint/module **done** khi:
 6. **Errors** — `AppError` + `code` ổn định; không 500 trần do quên catch nghiệp vụ; message tiếng Việt an toàn.
 7. **Layering** — Không query DB trong controller; không HTTP/status trong repository.
 8. **Docs** — Đổi invariant/domain → cập nhật `04-domain` / glossary hoặc ADR mới supersede.
-9. **Check** — Logic không tầm thường có ít nhất một runnable check (unit/integration) fail được khi regress. Hiện tối thiểu: `pnpm run typecheck`.
-10. **Secrets / PII** — Không commit secret; không log SĐT/email/địa chỉ/token/OTP.
+9. **Feature gate** — Đụng domain, tồn kho, hoặc API → có `docs/features/<slug>/spec.md` trước hoặc cùng PR ([`../06-operations/agent-stack.md`](../06-operations/agent-stack.md)).
+10. **Check** — Logic không tầm thường có ít nhất một runnable check (unit/integration) fail được khi regress. Hiện tối thiểu: `pnpm run typecheck`.
+11. **Secrets / PII** — Không commit secret; không log SĐT/email/địa chỉ/token/OTP.
 
 ## Checklist PR (backend)
 
 - [ ] `pnpm run typecheck` pass
 - [ ] Migration (nếu đổi schema) đã `generate` + review SQL; không sửa migration đã apply trên shared
 - [ ] OpenAPI cập nhật cùng PR
+- [ ] Feature đụng domain/API có `docs/features/<slug>/spec.md`
 - [ ] Không thêm dependency nếu stdlib/package sẵn đủ
 - [ ] Hard rules trong [`AGENTS.md`](../../AGENTS.md) vẫn đúng

@@ -1,29 +1,29 @@
 import { Request, Response, NextFunction } from 'express';
 import { adminService } from '../services/admin.service.js';
-import { HttpStatus, ADMIN_COOKIE_NAME } from '../constants/http-status.js';
+import { HttpStatus, ErrorCode } from '../constants/http-status.js';
 import { appConfig } from '../configs/app.config.js';
+import { clearAdminSessionCookie, setAdminSessionCookie } from '../utils/session-cookie.util.js';
 
 export class AdminController {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
       const { password } = req.body;
-      if (password !== 'admin123' && password !== appConfig.adminSessionToken) {
+      const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+      if (password !== adminPassword && password !== appConfig.adminSessionToken) {
         return res.status(HttpStatus.UNAUTHORIZED).json({
-          code: 'INVALID_CREDENTIALS',
+          code: ErrorCode.INVALID_CREDENTIALS,
           message: 'Mật khẩu quản trị không đúng',
         });
       }
 
-      res.cookie(ADMIN_COOKIE_NAME, appConfig.adminSessionToken, {
-        httpOnly: true,
-        secure: !appConfig.isDev,
-        sameSite: 'lax',
-        path: '/',
-      });
+      setAdminSessionCookie(res, appConfig.adminSessionToken);
 
       return res.status(HttpStatus.OK).json({
         token: appConfig.adminSessionToken,
-        message: 'Đăng nhập trang quản trị thành công',
+        user: {
+          role: 'admin',
+          name: 'Chủ shop / Quản trị viên',
+        },
       });
     } catch (error) {
       next(error);
@@ -32,13 +32,8 @@ export class AdminController {
 
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
-      res.clearCookie(ADMIN_COOKIE_NAME, {
-        httpOnly: true,
-        secure: !appConfig.isDev,
-        sameSite: 'lax',
-        path: '/',
-      });
-      return res.status(HttpStatus.OK).json({ success: true, message: 'Đã đăng xuất' });
+      clearAdminSessionCookie(res);
+      return res.status(HttpStatus.OK).json({ success: true });
     } catch (error) {
       next(error);
     }
