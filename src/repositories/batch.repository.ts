@@ -83,11 +83,8 @@ export class BatchRepository {
       const cur = map.get(row.batchId) ?? emptyBatchStats();
       cur.totalItemsCount = Number(row.total);
       cur.soldItemsCount = Number(row.sold);
-<<<<<<< HEAD
       cur.catalogListTotal = Number(row.listTotal);
       cur.catalogCostTotal = Number(row.costTotal);
-=======
->>>>>>> origin/main
       cur.itemStatusCounts = {
         draft: Number(row.draft),
         shelf: Number(row.shelf),
