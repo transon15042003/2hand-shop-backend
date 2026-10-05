@@ -1384,7 +1384,7 @@ paths:
       operationId: markAdminOrderDepositPaid
       summary: Ghi nhận đã nhận cọc
       description: |
-        Chỉ khi `deposit_status` = `pending` và đơn đang `new` hoặc `confirmed`. Chuyển `deposit_status` → `paid`, ghi `deposit_paid_at`.
+        Chỉ khi `deposit_status` = `pending` và đơn đang `new` hoặc `confirmed`. Chuyển `deposit_status` → `received`, ghi `deposit_paid_at`.
         Đơn cần cọc chỉ được giao bưu cục sau khi đã nhận cọc. Sai trạng thái → 409 `INVALID_TRANSITION`.
       tags:
         - Admin Orders
@@ -1922,15 +1922,14 @@ components:
     DepositStatus:
       type: string
       description: |
-        Cọc cho đơn đầu tiên của một số điện thoại (ADR 004; số tiền theo cài đặt, ADR 005):
+        Cọc cho đơn đầu tiên của một số điện thoại (ADR 004/008; số tiền theo cài đặt, ADR 005):
         - `not_required`: Không cần cọc (số điện thoại đã có đơn hoàn tất)
         - `pending`: Chờ khách chuyển cọc (shop chưa giao bưu cục)
-        - `paid`: Shop đã nhận cọc
-        - `applied`: Đơn hoàn tất, cọc đã trừ vào tiền đơn
+        - `received`: Shop đã nhận cọc (giữ nguyên khi đơn hoàn tất; khấu trừ thể hiện qua `amount_due` / cash-flow)
         - `forfeited`: Khách mất cọc (trả hàng, hoặc khách tự hủy sau khi shop đã xác nhận đơn)
         - `refunded`: Đơn hủy, shop hoàn cọc (shop hủy, hoặc khách hủy trước khi shop xác nhận)
         - `voided`: Đơn hủy khi chưa nhận cọc (không có gì để hoàn)
-      enum: [not_required, pending, paid, applied, forfeited, refunded, voided]
+      enum: [not_required, pending, received, forfeited, refunded, voided]
 
     CancelActor:
       type: string

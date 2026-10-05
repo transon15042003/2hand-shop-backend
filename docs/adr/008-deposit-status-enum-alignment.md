@@ -28,5 +28,5 @@ Frontend contract/glossary historically dùng bộ tên khác (`paid`, `applied`
 ## Consequences
 
 - Implementer/agent không implement `paid`/`applied` trên BE.
-- Khi sync OpenAPI với FE: map FE `paid` → BE `received` nếu còn lệch, hoặc cập nhật FE contract trong PR riêng.
+- Khi sync OpenAPI với FE: dùng `received` (không map `paid`).
 - Không đổi luật nghiệp vụ cọc/trả của ADR 004 ngoài tên enum.

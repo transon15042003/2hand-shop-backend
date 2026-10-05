@@ -105,6 +105,6 @@ FE (`2hand-shop`) có thể khác — đồng bộ qua PR OpenAPI riêng, **khô
 | Chủ đề | Backend (SSOT) | Frontend (tham chiếu docs/contract) |
 |---|---|---|
 | `category` | 13 giá trị: `t_shirts`, `shirts`, `sweaters`, `jackets`, `blazers`, `pants`, `shorts`, `skirts`, `dresses`, `bags`, `scarves`, `hats`, `accessories` | Thường 5 nhóm: `tops`, `bottoms`, `dresses`, `outerwear`, `other` |
-| `condition` | `like_new`, `excellent`, `good`, `fair` | Có thể có thêm `new`, `attention_required`; thiếu `excellent` |
-| `deposit_status` | `not_required`, `pending`, `received`, `forfeited`, `refunded`, `voided` (ADR [008](../adr/008-deposit-status-enum-alignment.md)) | Docs FE từng dùng `paid` / `applied` |
-| `payment_status` | `unpaid`, `partial`, `paid`, `refunded` | Docs FE từng dùng `pending_cod` thay cho treo COD |
+| `condition` | `new`, `like_new`, `good`, `fair`, `attention_required` | Khớp OpenAPI |
+| `deposit_status` | `not_required`, `pending`, `received`, `forfeited`, `refunded`, `voided` (ADR [008](../adr/008-deposit-status-enum-alignment.md)) | Khớp OpenAPI sau `openapi-fe-sync` |
+| `payment_status` | DB: `unpaid`, `pending_cod`, `partial`, `paid`, `refunded`; OpenAPI MVP: `unpaid`, `pending_cod`, `paid` | Khớp OpenAPI MVP |
