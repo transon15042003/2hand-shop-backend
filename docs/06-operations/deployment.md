@@ -16,7 +16,8 @@ Target điển hình: Render (Blueprint [`render.yaml`](../../render.yaml)) / Ra
 
 1. Push repo lên GitHub.
 2. Render Dashboard → New → Blueprint → chọn repo (file `render.yaml`).
-3. Điền secrets sync:false: `DATABASE_URL`, `ADMIN_PASSWORD`, `CORS_ORIGIN` (URL FE production), `BLOB_READ_WRITE_TOKEN`.
+3. Điền secrets sync:false: `DATABASE_URL`, `CORS_ORIGIN` (URL FE production), `BLOB_READ_WRITE_TOKEN`.
+   Không cần `ADMIN_PASSWORD` / `ADMIN_SESSION_TOKEN` (login qua `admin_users`).
 4. Deploy; kiểm tra `/api/health` và `/api/ready`.
 
 Hold expire chạy in-process (`HOLD_EXPIRE_INTERVAL_MS`). Cron riêng (Render Cron = **trả phí**) chỉ cần nếu tắt interval (`0`) rồi dùng `pnpm run job:expire-holds`.

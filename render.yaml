@@ -22,10 +22,6 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: ADMIN_SESSION_TOKEN
-        generateValue: true
-      - key: ADMIN_PASSWORD
-        sync: false
       - key: CORS_ORIGIN
         sync: false
       - key: BLOB_READ_WRITE_TOKEN
