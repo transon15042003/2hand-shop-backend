@@ -13,6 +13,8 @@ export type BatchStats = {
   totalItemsCount: number;
   soldItemsCount: number;
   totalRevenue: number;
+  catalogListTotal: number;
+  catalogCostTotal: number;
   categories: string[];
   itemStatusCounts: BatchItemStatusCounts;
 };
@@ -29,6 +31,8 @@ export function emptyBatchStats(): BatchStats {
     totalItemsCount: 0,
     soldItemsCount: 0,
     totalRevenue: 0,
+    catalogListTotal: 0,
+    catalogCostTotal: 0,
     categories: [],
     itemStatusCounts: emptyItemStatusCounts(),
   };
@@ -54,6 +58,9 @@ export function toBatchSummary(row: BatchRow, stats: BatchStats) {
     total_items_count: stats.totalItemsCount,
     sold_items_count: stats.soldItemsCount,
     total_revenue: stats.totalRevenue,
+    catalog_list_total: stats.catalogListTotal,
+    catalog_cost_total: stats.catalogCostTotal,
+    list_vs_investment: stats.catalogListTotal - totalInvestment,
     break_even_target: breakEvenTarget,
     remaining_to_break_even: Math.max(0, breakEvenTarget - stats.totalRevenue),
     is_broken_even: isBrokenEven,
