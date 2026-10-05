@@ -14,16 +14,16 @@ Domain dùng **Item**, không “listing” sàn. Validation + moderation cho m�
 ## Category & condition (schema)
 
 - **category** ∈ `t_shirts` \| `shirts` \| `sweaters` \| `jackets` \| `blazers` \| `pants` \| `shorts` \| `skirts` \| `dresses` \| `bags` \| `scarves` \| `hats` \| `accessories`
-- **condition** ∈ `like_new` \| `excellent` \| `good` \| `fair`
+- **condition** ∈ `new` \| `like_new` \| `good` \| `fair` \| `attention_required`
 
-Lệch FE: xem [`../00-product/glossary.md`](../00-product/glossary.md).
+Lệch FE: không còn (đã align schema với OpenAPI).
 
 ## Create / update (admin)
 
-Zod (`item.dto`): bắt buộc name, category, condition, price, size, material, images, measurements.  
-Khuyết điểm: `defectDescription` + `defectImages` khi mô tả lỗi (theo OpenAPI / DTO).
+Zod (`item.dto`): `ItemUpsertRequest` snake_case — name, batch_id, category, condition, price, size, material, measurements, images `{url,alt}`, status `draft|shelf`.  
+`attention_required` bắt buộc `defect_description` + `defect_images` (≥1 ảnh có alt).
 
-Ảnh = mảng URL + `displayOrder` — **không** upload binary qua API này (MVP). Giới hạn số ảnh: theo OpenAPI / Zod hiện hành.
+Ảnh = mảng URL + `alt` — **không** upload binary qua API này (MVP). Giới hạn số ảnh: theo OpenAPI / Zod hiện hành.
 
 ## Prohibited / moderation
 

@@ -33,10 +33,11 @@ export const itemCategoryEnum = pgEnum('item_category', [
 ]);
 
 export const itemConditionEnum = pgEnum('item_condition', [
+  'new',
   'like_new',
-  'excellent',
   'good',
   'fair',
+  'attention_required',
 ]);
 
 export const itemStatusEnum = pgEnum('item_status', [
@@ -147,9 +148,9 @@ export const items = pgTable('items', {
   status: itemStatusEnum('status').notNull().default('shelf'),
   batchId: varchar('batch_id', { length: 50 }).references(() => batches.id),
   measurements: jsonb('measurements').$type<Record<string, number | string>>().notNull().default({}),
-  images: jsonb('images').$type<{ url: string; displayOrder: number }[]>().notNull().default([]),
+  images: jsonb('images').$type<{ url: string; alt: string }[]>().notNull().default([]),
   defectDescription: text('defect_description'),
-  defectImages: jsonb('defect_images').$type<string[]>().default([]),
+  defectImages: jsonb('defect_images').$type<{ url: string; alt: string }[]>().default([]),
   reservedUntil: timestamp('reserved_until', { withTimezone: true }),
   reservedByCustomerPhone: varchar('reserved_by_customer_phone', { length: 20 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),

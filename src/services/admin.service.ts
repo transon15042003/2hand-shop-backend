@@ -8,61 +8,185 @@ import { settingRepository } from '../repositories/setting.repository.js';
 import { cashFlowRepository } from '../repositories/cash-flow.repository.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
+import { canChangeItemStatus, draftProblems, publishProblems } from '../utils/item-publish.util.js';
+import { toAdminDetail, toAdminSummary, upsertBodyToRow } from '../utils/item-mapper.util.js';
+
+function newItemId() {
+  const stamp = Date.now().toString(36).toUpperCase();
+  const rand = Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, '0');
+  return `KN${stamp}-${rand}`;
+}
 
 export class AdminService {
   async getAdminItems(filters?: {
     status?: string;
     category?: string;
-    batchId?: string;
+    condition?: string;
+    batch_id?: string;
     search?: string;
+    sort?: string;
+    page?: number;
     limit?: number;
-    offset?: number;
   }) {
-    const limit = filters?.limit ?? 50;
-    const offset = filters?.offset ?? 0;
+    const page = filters?.page ?? 1;
+    const limit = filters?.limit ?? 20;
+    const offset = (page - 1) * limit;
 
-    const conditions = [];
-    if (filters?.status) conditions.push(eq(items.status, filters.status as any));
-    if (filters?.category) conditions.push(eq(items.category, filters.category as any));
-    if (filters?.batchId) conditions.push(eq(items.batchId, filters.batchId));
-
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-    const [itemList, countRes] = await Promise.all([
-      db
-        .select()
-        .from(items)
-        .where(whereClause)
-        .orderBy(desc(items.createdAt))
-        .limit(limit)
-        .offset(offset),
-      db
-        .select({ count: sql<number>`count(*)` })
-        .from(items)
-        .where(whereClause),
+    const [{ items: itemList, total }, stats] = await Promise.all([
+      itemRepository.findAdminItems({
+        status: filters?.status,
+        category: filters?.category,
+        condition: filters?.condition,
+        batchId: filters?.batch_id,
+        search: filters?.search,
+        sort: filters?.sort,
+        limit,
+        offset,
+      }),
+      itemRepository.statusStats(),
     ]);
 
     return {
-      items: itemList,
-      total: Number(countRes[0]?.count ?? 0),
-      limit,
-      offset,
+      items: itemList.map(toAdminSummary),
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / limit)),
+      },
+      stats,
     };
   }
 
-  async createItem(data: any) {
-    return await itemRepository.create({
-      ...data,
-      status: 'shelf',
-    });
+  async getAdminItem(id: string) {
+    const row = await itemRepository.findById(id);
+    if (!row) {
+      throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
+    }
+    return toAdminDetail(row);
   }
 
-  async updateItem(id: string, data: any) {
+  async createItem(body: any) {
+    const candidate = {
+      name: body.name,
+      price: body.price,
+      category: body.category,
+      condition: body.condition,
+      size: body.size,
+      material: body.material,
+      measurements: body.measurements,
+      images: body.images,
+      defect_description: body.defect_description,
+      defect_images: body.defect_images,
+    };
+    const problems = body.status === 'shelf' ? publishProblems(candidate) : draftProblems(candidate);
+    if (Object.keys(problems).length) {
+      throw new AppError(
+        'Chưa đủ điều kiện lưu món',
+        HttpStatus.BAD_REQUEST,
+        body.status === 'shelf' ? ErrorCode.PUBLISH_REQUIREMENTS_NOT_MET : ErrorCode.VALIDATION_FAILED,
+        problems
+      );
+    }
+
+    const row = upsertBodyToRow(body);
+    const created = await itemRepository.create({
+      id: newItemId(),
+      ...row,
+    });
+    return toAdminDetail(created);
+  }
+
+  async updateItem(id: string, body: any) {
     const existing = await itemRepository.findById(id);
     if (!existing) {
       throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
     }
-    return await itemRepository.update(id, data);
+
+    if (
+      (existing.status === 'reserved' || existing.status === 'sold') &&
+      typeof body.price === 'number' &&
+      body.price !== existing.price
+    ) {
+      throw new AppError('Món đang giữ chỗ hoặc đã bán không đổi giá được', HttpStatus.CONFLICT, ErrorCode.PRICE_LOCKED);
+    }
+
+    const targetStatus = body.status ?? (existing.status === 'shelf' || existing.status === 'draft' ? existing.status : 'draft');
+    if (targetStatus !== 'draft' && targetStatus !== 'shelf') {
+      throw new AppError('Chỉ lưu trạng thái nháp hoặc trên kệ', HttpStatus.BAD_REQUEST, ErrorCode.INVALID_TRANSITION);
+    }
+
+    const candidate = {
+      name: body.name,
+      price: body.price,
+      category: body.category,
+      condition: body.condition,
+      size: body.size,
+      material: body.material,
+      measurements: body.measurements,
+      images: body.images,
+      defect_description: body.defect_description,
+      defect_images: body.defect_images,
+    };
+    const problems = targetStatus === 'shelf' ? publishProblems(candidate) : draftProblems(candidate);
+    if (Object.keys(problems).length) {
+      throw new AppError(
+        'Chưa đủ điều kiện lưu món',
+        HttpStatus.BAD_REQUEST,
+        targetStatus === 'shelf' ? ErrorCode.PUBLISH_REQUIREMENTS_NOT_MET : ErrorCode.VALIDATION_FAILED,
+        problems
+      );
+    }
+
+    // reserved/sold: allow metadata updates but keep status
+    const row = upsertBodyToRow({ ...body, status: targetStatus });
+    if (existing.status === 'reserved' || existing.status === 'sold') {
+      delete (row as any).status;
+      delete (row as any).price;
+    }
+
+    const updated = await itemRepository.update(id, row);
+    return toAdminDetail(updated!);
+  }
+
+  async updateItemStatus(id: string, status: 'draft' | 'shelf') {
+    const existing = await itemRepository.findById(id);
+    if (!existing) {
+      throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
+    }
+
+    const gate = canChangeItemStatus(existing.status, status);
+    if (!gate.allowed) {
+      throw new AppError(gate.reason || 'Không đổi được trạng thái', HttpStatus.CONFLICT, gate.code || ErrorCode.INVALID_TRANSITION);
+    }
+
+    if (status === 'shelf') {
+      const problems = publishProblems({
+        name: existing.name,
+        price: existing.price,
+        category: existing.category,
+        condition: existing.condition,
+        size: existing.size,
+        material: existing.material,
+        measurements: existing.measurements,
+        images: existing.images as any,
+        defect_description: existing.defectDescription,
+        defect_images: existing.defectImages as any,
+      });
+      if (Object.keys(problems).length) {
+        throw new AppError(
+          'Chưa đủ điều kiện lên kệ',
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.PUBLISH_REQUIREMENTS_NOT_MET,
+          problems
+        );
+      }
+    }
+
+    const updated = await itemRepository.update(id, { status });
+    return toAdminDetail(updated!);
   }
 
   async getAdminOrders(filters?: { status?: string; limit?: number; offset?: number }) {

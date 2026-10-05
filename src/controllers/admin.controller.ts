@@ -41,16 +41,17 @@ export class AdminController {
 
   async getItems(req: Request, res: Response, next: NextFunction) {
     try {
-      const { status, category, batch_id, search, limit, offset } = req.query as any;
-      const result = await adminService.getAdminItems({
-        status,
-        category,
-        batchId: batch_id,
-        search,
-        limit: limit ? parseInt(limit, 10) : 50,
-        offset: offset ? parseInt(offset, 10) : 0,
-      });
+      const result = await adminService.getAdminItems(req.query as any);
       return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getItem(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await adminService.getAdminItem(req.params.id);
+      return res.status(HttpStatus.OK).json(item);
     } catch (error) {
       next(error);
     }
@@ -67,8 +68,16 @@ export class AdminController {
 
   async updateItem(req: Request, res: Response, next: NextFunction) {
     try {
-      const { id } = req.params;
-      const item = await adminService.updateItem(id, req.body);
+      const item = await adminService.updateItem(req.params.id, req.body);
+      return res.status(HttpStatus.OK).json(item);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateItemStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await adminService.updateItemStatus(req.params.id, req.body.status);
       return res.status(HttpStatus.OK).json(item);
     } catch (error) {
       next(error);
