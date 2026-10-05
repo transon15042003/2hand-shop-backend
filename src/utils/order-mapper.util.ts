@@ -1,5 +1,4 @@
 import type { items, orders } from '../db/schema.js';
-import { toApiDepositStatus } from './deposit-status.util.js';
 import { toPublicSummary } from './item-mapper.util.js';
 
 type OrderRow = typeof orders.$inferSelect;
@@ -34,7 +33,7 @@ export function toAdminOrderSummary(ord: OrderRow, totalItems: number) {
     payment_method: ord.paymentMethod,
     order_status: ord.orderStatus,
     payment_status: ord.paymentStatus,
-    deposit_status: toApiDepositStatus(ord.depositStatus),
+    deposit_status: ord.depositStatus,
     deposit_amount: ord.depositAmount,
     amount_due: ord.amountDue,
     hold_expires_at: ord.holdExpiresAt?.toISOString() ?? null,

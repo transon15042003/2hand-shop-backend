@@ -84,7 +84,7 @@ async function main() {
     order_status: string;
     order_code: string;
   };
-  assert(afterDeposit.deposit_status === 'paid', `api paid got ${afterDeposit.deposit_status}`);
+  assert(afterDeposit.deposit_status === 'received', `api received got ${afterDeposit.deposit_status}`);
   assert(afterDeposit.order_status === 'new', 'deposit must not auto-confirm');
 
   const confirm = await adminFetch(`/admin/orders/${encodeURIComponent(code)}/confirm`, token, {

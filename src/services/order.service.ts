@@ -6,7 +6,6 @@ import { orderRepository } from '../repositories/order.repository.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
 import { toPublicSummary } from '../utils/item-mapper.util.js';
-import { toApiDepositStatus } from '../utils/deposit-status.util.js';
 
 function dedupeIds(ids: string[]): string[] {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
@@ -115,7 +114,7 @@ export class OrderService {
       default_shipping_fee: order.defaultShippingFee,
       freeship_applied: order.freeshipApplied,
       total: order.total,
-      deposit_status: toApiDepositStatus(order.depositStatus),
+      deposit_status: order.depositStatus,
       deposit_amount: order.depositAmount,
       amount_due: order.amountDue,
       agreed_return_fee: order.agreedReturnFee,
@@ -333,7 +332,7 @@ export class OrderService {
       freeship_applied: ord.freeshipApplied,
       total: ord.total,
       deposit_amount: ord.depositAmount,
-      deposit_status: toApiDepositStatus(ord.depositStatus),
+      deposit_status: ord.depositStatus,
       amount_due: ord.amountDue,
       agreed_return_fee: ord.agreedReturnFee,
       return_window_days: ord.returnWindowDays,
