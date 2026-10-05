@@ -1,7 +1,7 @@
 # 001 — Kiến trúc công nghệ Backend: Node.js, Express, Drizzle ORM, Neon Postgres
 
 Trạng thái: Đã chốt ngày 2026-09-27.  
-Nguồn: Quyết định lựa chọn công nghệ cho dự án `2hand-shop-backend`.
+Nguồn: Quyết định lựa chọn công nghệ cho dự án `hk-small-store-backend`.
 
 ---
 

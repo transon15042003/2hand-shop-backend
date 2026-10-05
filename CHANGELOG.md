@@ -15,7 +15,7 @@ Versioning follows [SemVer](https://semver.org/).
 
 ### Added
 
-- OpenAPI contract copy at `docs/02-api/openapi.yaml` (synced from Frontend `2hand-shop/contracts/openapi.yaml`).
+- OpenAPI contract copy at `docs/02-api/openapi.yaml` (synced from Frontend `HK Small Store/contracts/openapi.yaml`).
 
 ## [1.0.0] — 2026-10-04
 

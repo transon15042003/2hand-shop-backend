@@ -62,4 +62,4 @@ VND, **integer**, không dùng float.
 
 Mọi thay đổi path/schema → cập nhật [`openapi.yaml`](./openapi.yaml) **trước hoặc cùng PR** với code.
 
-Đồng bộ Frontend: copy/align với `2hand-shop/contracts/openapi.yaml`. Khi enum lệch (category, condition, deposit_status…), ưu tiên schema BE + ADR; ghi nhận ở [`../00-product/glossary.md`](../00-product/glossary.md) và lên kế hoạch sync FE riêng — không “sửa docs BE cho giống FE” nếu code chưa đổi.
+Đồng bộ Frontend: copy/align với `HK Small Store/contracts/openapi.yaml`. Khi enum lệch (category, condition, deposit_status…), ưu tiên schema BE + ADR; ghi nhận ở [`../00-product/glossary.md`](../00-product/glossary.md) và lên kế hoạch sync FE riêng — không “sửa docs BE cho giống FE” nếu code chưa đổi.

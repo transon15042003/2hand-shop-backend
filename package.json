@@ -1,7 +1,7 @@
 {
-  "name": "2hand-shop-backend",
+  "name": "hk-small-store-backend",
   "version": "1.0.0",
-  "description": "Backend API Server for 2hand-shop with Express, Drizzle ORM and PostgreSQL",
+  "description": "Backend API Server for hk-small-store with Express, Drizzle ORM and PostgreSQL",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

@@ -2,11 +2,11 @@
 
 Date: 2026-10-05  
 Status: implemented  
-Repo: `2hand-shop-backend`
+Repo: `hk-small-store-backend`
 
 ## Goal
 
-Make `2hand-shop-backend` agent-ready like the frontend: start from `AGENTS.md`, rich accurate docs under the existing BE tree, Superpowers workflow (`docs/superpowers/specs|plans`), and Cursor/Claude entry files. Content must match **backend code** as SSOT; note Frontend divergences instead of rewriting BE docs to look like FE.
+Make `hk-small-store-backend` agent-ready like the frontend: start from `AGENTS.md`, rich accurate docs under the existing BE tree, Superpowers workflow (`docs/superpowers/specs|plans`), and Cursor/Claude entry files. Content must match **backend code** as SSOT; note Frontend divergences instead of rewriting BE docs to look like FE.
 
 ## Decisions locked with product owner
 
@@ -33,10 +33,10 @@ Gaps vs FE agent setup:
 ## Target additions / updates
 
 ```
-2hand-shop-backend/
+hk-small-store-backend/
 ├── AGENTS.md                         # refresh docs map if needed
 ├── CLAUDE.md                         # NEW → @AGENTS.md
-├── .cursor/rules/2hand-shop-backend.mdc  # NEW
+├── .cursor/rules/hk-small-store-backend.mdc  # NEW
 ├── CHANGELOG.md                      # Unreleased note
 └── docs/
     ├── README.md                     # refresh index

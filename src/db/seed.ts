@@ -95,7 +95,7 @@ async function seed() {
       id: demoCustomerId,
       name: 'Khách seed',
       phone: '0901234567',
-      email: 'khachhang@2handshop.vn',
+      email: 'khachhang@hksmallstore.vn',
       passwordHash,
       isVerified: true,
     });

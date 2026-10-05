@@ -28,4 +28,4 @@ FE đã tắt mock và gọi OpenAPI items. Backend còn thiếu filter public, 
 
 - OpenAPI `/items`, `/admin/items*`
 - Domain: [`../../04-domain/listing-rules.md`](../../04-domain/listing-rules.md)
-- FE: `2hand-shop/src/lib/item-rules.ts`
+- FE: `HK Small Store/src/lib/item-rules.ts`

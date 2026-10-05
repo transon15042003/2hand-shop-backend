@@ -1,10 +1,10 @@
-# Vision — 2hand-shop Backend
+# Vision — HK Small Store Backend
 
 ## Product purpose
 
 Backend là **authority of truth** cho cửa hàng quần áo cũ một chủ: tồn kho 1-of-1, đơn hàng, cọc/COD, phiên khách, cài đặt shop và dòng tiền.
 
-Frontend (`2hand-shop`) chịu UI, giỏ localStorage, và gọi API. Backend quyết định ai giữ món, trạng thái đơn, và số tiền.
+Frontend (`hk-small-store`) chịu UI, giỏ localStorage, và gọi API. Backend quyết định ai giữ món, trạng thái đơn, và số tiền.
 
 ## Positioning
 

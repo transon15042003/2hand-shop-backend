@@ -1,12 +1,12 @@
 /**
  * Runnable check for auth-session (ADR 006 + OpenAPI paths).
- * Requires: server on PORT (default 5000), seeded customer khachhang@2handshop.vn / 123456
+ * Requires: server on PORT (default 5000), seeded customer khachhang@hksmallstore.vn / 123456
  * Usage: pnpm exec tsx scripts/check-auth-session.ts
  */
 import 'dotenv/config';
 
 const base = `http://localhost:${process.env.PORT || 5000}/api`;
-const email = 'khachhang@2handshop.vn';
+const email = 'khachhang@hksmallstore.vn';
 const password = process.env.SEED_CUSTOMER_PASSWORD || '123456';
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -35,7 +35,7 @@ async function main() {
   });
   assert(loginRes.status === 200, `login status ${loginRes.status}: ${await loginRes.clone().text()}`);
   const setCookie = loginRes.headers.get('set-cookie');
-  assert(setCookie && setCookie.includes('2hand_customer_session='), 'missing session Set-Cookie');
+  assert(setCookie && setCookie.includes('hk_small_store_customer_session='), 'missing session Set-Cookie');
   assert(/Max-Age=34560000/i.test(setCookie), `expected Max-Age=34560000, got: ${setCookie}`);
   assert(!/Expires=/i.test(setCookie), `cookie must not use Expires: ${setCookie}`);
   const cookie = cookieHeader(setCookie);

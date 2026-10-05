@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Enrich all `2hand-shop-backend` docs and add FE-parity agent tooling (`CLAUDE.md`, `.cursor/rules`, `docs/superpowers/`) so agents can develop from `AGENTS.md` with BE-accurate content.
+**Goal:** Enrich all `hk-small-store-backend` docs and add FE-parity agent tooling (`CLAUDE.md`, `.cursor/rules`, `docs/superpowers/`) so agents can develop from `AGENTS.md` with BE-accurate content.
 
 **Architecture:** Keep existing BE folder numbering. Expand thin markdown from live code (`src/db/schema.ts`, services, OpenAPI). Audit ADRs; fix FE links; add superseding ADR `008+` only when code truly diverges. Document FE drift without changing BE schema.
 
@@ -24,7 +24,7 @@
 | Path | Action |
 |---|---|
 | `CLAUDE.md` | Create `@AGENTS.md` |
-| `.cursor/rules/2hand-shop-backend.mdc` | Create alwaysApply rule |
+| `.cursor/rules/hk-small-store-backend.mdc` | Create alwaysApply rule |
 | `CHANGELOG.md` | Unreleased enrichment note |
 | `AGENTS.md`, `docs/README.md` | Refresh if map grows |
 | `docs/00-product/{vision,personas}.md` | Create |
@@ -45,7 +45,7 @@
 
 **Files:**
 - Create: `CLAUDE.md`
-- Create: `.cursor/rules/2hand-shop-backend.mdc`
+- Create: `.cursor/rules/hk-small-store-backend.mdc`
 - Modify: `CHANGELOG.md`
 - Ensure: `docs/superpowers/specs/` and `plans/` exist (design already there)
 
@@ -58,15 +58,15 @@
 @AGENTS.md
 ```
 
-- [ ] **Step 2: Write `.cursor/rules/2hand-shop-backend.mdc`**
+- [ ] **Step 2: Write `.cursor/rules/hk-small-store-backend.mdc`**
 
 ```markdown
 ---
-description: 2hand-shop-backend rules for agents
+description: hk-small-store-backend rules for agents
 alwaysApply: true
 ---
 
-# 2hand-shop-backend
+# hk-small-store-backend
 
 Read [`AGENTS.md`](../../AGENTS.md) before editing. Details under [`docs/`](../../docs/).
 
@@ -88,7 +88,7 @@ Under `## [Unreleased]` / `### Changed` (create sections if missing):
 - [ ] **Step 4: Verify**
 
 ```bash
-test -f CLAUDE.md && test -f .cursor/rules/2hand-shop-backend.mdc
+test -f CLAUDE.md && test -f .cursor/rules/hk-small-store-backend.mdc
 grep -q 'Enriched agent-facing' CHANGELOG.md
 test -f docs/superpowers/specs/2026-10-05-backend-docs-enrichment-design.md
 ```
@@ -122,9 +122,9 @@ Compare at minimum:
 - [ ] **Step 2: Fix FE links** in ADR 000, 002, 004, 005, 006 (and any others):
 
 Replace  
-`../../../2hand-shop/docs/decisions/<file>.md`  
+`../../../HK Small Store/docs/decisions/<file>.md`  
 with  
-`../../../2hand-shop/docs/adr/<file>.md`  
+`../../../HK Small Store/docs/adr/<file>.md`  
 (FE ADR 003 filename may be `003-ui-mock-completion.md` — do not invent backend’s API ADR on FE.)
 
 - [ ] **Step 3: If audit finds real sealed-ADR vs code conflict**
@@ -206,7 +206,7 @@ test -f docs/00-product/vision.md && test -f docs/00-product/personas.md
 
 - [ ] **Step 1: Architecture** — document Express entry, layering Controller→Service→Repository, real folders (`controllers/`, `services/`, `repositories/`, `db/`, `dtos/`, `middlewares/`, `routes/`).
 
-- [ ] **Step 2: API** — REST conventions, Zod middleware, AppError codes, customer vs admin auth, OpenAPI sync rule with FE `2hand-shop/contracts/openapi.yaml`.
+- [ ] **Step 2: API** — REST conventions, Zod middleware, AppError codes, customer vs admin auth, OpenAPI sync rule with FE `HK Small Store/contracts/openapi.yaml`.
 
 - [ ] **Step 3: Database** — table list from schema; Drizzle generate/migrate commands; transaction + `FOR UPDATE` rules aligned with ADR 007 / order-flow.
 
@@ -251,7 +251,7 @@ grep -q 'Drizzle' docs/03-database/prisma-conventions.md
 
 ```bash
 find docs/00-product docs/01-architecture docs/02-api docs/03-database docs/04-domain docs/05-quality docs/06-operations docs/adr docs/features -name '*.md' | wc -l
-test -f CLAUDE.md && test -f .cursor/rules/2hand-shop-backend.mdc
+test -f CLAUDE.md && test -f .cursor/rules/hk-small-store-backend.mdc
 grep -q 'Item' docs/04-domain/listing-rules.md
 # AGENTS map paths exist
 for p in docs/00-product/glossary.md docs/04-domain/order-flow.md docs/03-database/transactions.md docs/05-quality/security.md; do test -f "$p" || echo MISS $p; done

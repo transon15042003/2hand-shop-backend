@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: twohand_shop
+      POSTGRES_DB: hk_small_store
     ports:
       - "5432:5432"
     volumes:

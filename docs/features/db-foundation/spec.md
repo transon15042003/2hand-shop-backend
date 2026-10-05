@@ -15,7 +15,7 @@ Backend đã có `schema.ts`, Express layers, và OpenAPI — nhưng `drizzle/mi
 - **Out**:
   - Không đổi contract HTTP trừ khi phát hiện lệch schema↔OpenAPI bắt buộc
   - Không làm auth OTP thật, Blob upload, hold-expire job
-  - Không nối FE (đó là `db-foundation` phía `2hand-shop`)
+  - Không nối FE (đó là `db-foundation` phía `hk-small-store`)
   - Không Redis / payment gateway / carrier API
 
 ## Acceptance criteria
@@ -34,4 +34,4 @@ Backend đã có `schema.ts`, Express layers, và OpenAPI — nhưng `drizzle/mi
 - Migrations: [`../../03-database/migrations.md`](../../03-database/migrations.md)
 - Setup: [`../../06-operations/setup.md`](../../06-operations/setup.md)
 - ADR: [`../../adr/001-stack.md`](../../adr/001-stack.md), [`../../adr/000-pham-vi.md`](../../adr/000-pham-vi.md)
-- FE song song: `2hand-shop/docs/features/db-foundation/`
+- FE song song: `HK Small Store/docs/features/db-foundation/`

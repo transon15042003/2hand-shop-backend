@@ -2,7 +2,7 @@
 
 ```
 ┌─────────────────────┐
-│  Next.js Frontend   │  (repo 2hand-shop)
+│  Next.js Frontend   │  (repo HK Small Store)
 │  storefront + admin │
 └──────────┬──────────┘
            │ HTTPS / JSON

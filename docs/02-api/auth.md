@@ -13,7 +13,7 @@ Hai phân hệ độc lập. Không dùng chung cookie/token.
 ### Login / session
 
 - `POST /auth/login` — phone hoặc email + password.
-- Cookie: `2hand_customer_session` = raw token (HttpOnly, SameSite=Lax, Secure ở production, Max-Age 400 ngày).
+- Cookie: `hk_small_store_customer_session` = raw token (HttpOnly, SameSite=Lax, Secure ở production, Max-Age 400 ngày).
 - DB: `customer_sessions.token_hash` = SHA-256(raw). Không lưu raw token.
 - Sliding: nếu `lastSeenAt` > 1 giờ → gia hạn `expiresAt` + Set-Cookie lại.
 - `GET /auth/me` — require customer auth.

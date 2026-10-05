@@ -1,7 +1,7 @@
 # 003 — Kiến trúc RESTful API, Chuẩn hóa Contracts & Phân tầng hệ thống
 
 Trạng thái: Đã chốt ngày 2026-10-02.  
-Nguồn: Thống nhất hợp đồng API giữa Frontend Next.js và Backend Express. Tham chiếu [OpenAPI Contract](../02-api/openapi.yaml) (đồng bộ `2hand-shop/contracts/openapi.yaml`).
+Nguồn: Thống nhất hợp đồng API giữa Frontend Next.js và Backend Express. Tham chiếu [OpenAPI Contract](../02-api/openapi.yaml) (đồng bộ `HK Small Store/contracts/openapi.yaml`).
 
 ---
 

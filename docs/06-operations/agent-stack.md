@@ -26,6 +26,6 @@ ECC, gstack, ui-ux-pro-max, playwright (trừ E2E full-stack có chủ đích), 
 
 ## Gate tối thiểu
 
-Feature đụng domain, tồn kho, hoặc API: có `docs/features/<name>/spec.md` (hoặc cập nhật `04-domain` / ADR) trước khi merge — cũng nằm trong [`../05-quality/definition-of-done.md`](../05-quality/definition-of-done.md). Đổi endpoint → [`../02-api/openapi.yaml`](../02-api/openapi.yaml) cùng PR và đồng bộ `2hand-shop/contracts/openapi.yaml`.
+Feature đụng domain, tồn kho, hoặc API: có `docs/features/<name>/spec.md` (hoặc cập nhật `04-domain` / ADR) trước khi merge — cũng nằm trong [`../05-quality/definition-of-done.md`](../05-quality/definition-of-done.md). Đổi endpoint → [`../02-api/openapi.yaml`](../02-api/openapi.yaml) cùng PR và đồng bộ `HK Small Store/contracts/openapi.yaml`.
 
 **Ship**: feature xong → commit trên `feat/<slug>` → push → PR → merge `main` (xem [`git-workflow.md`](./git-workflow.md) + [`.cursor/rules/feature-ship.mdc`](../../.cursor/rules/feature-ship.mdc)); không mở feature kế khi chưa merge.

@@ -1,4 +1,4 @@
-# 2hand-shop-backend
+# hk-small-store-backend
 
 API server cho tiệm quần áo cũ tuyển chọn độc bản (1-of-1).
 
@@ -34,14 +34,14 @@ Biến môi trường chính: xem [`.env.example`](.env.example) và [`docs/06-o
 | ADRs | [`docs/adr/`](docs/adr/) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 
-Frontend đồng bộ: repo `2hand-shop` (Next.js). Contract HTTP chung qua OpenAPI.
+Frontend đồng bộ: repo `hk-small-store` (Next.js). Contract HTTP chung qua OpenAPI.
 
 ---
 
 ## Invariants cốt lõi
 
 1. **1-of-1**: Mỗi món tồn kho = 1. Tạo đơn dùng transaction + `FOR UPDATE`.
-2. **Session khách**: Cookie HttpOnly `2hand_customer_session`, token băm SHA-256, sliding 400 ngày.
+2. **Session khách**: Cookie HttpOnly `hk_small_store_customer_session`, token băm SHA-256, sliding 400 ngày.
 3. **Snapshot đơn**: Cọc / ship / return / hold / `policy_version` đóng băng lúc đặt hàng.
 4. **Thu tiền MVP**: Chuyển khoản thủ công + COD — không webhook cổng thanh toán.
 

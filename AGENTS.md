@@ -1,4 +1,4 @@
-# AGENTS.md — 2hand-shop-backend
+# AGENTS.md — hk-small-store-backend
 
 Hướng dẫn bắt buộc cho agent/developer khi làm việc với repo này.
 Chi tiết nằm trong [`docs/`](docs/). Đọc đúng mục trước khi sửa code.
@@ -22,7 +22,7 @@ Health check: `GET /api/health`
 ## Hard rules
 
 1. **Schema là SSOT data model**: `src/db/schema.ts`. Không sửa SQL migration đã apply trên môi trường dùng chung.
-2. **API contract là SSOT HTTP**: [`docs/02-api/openapi.yaml`](docs/02-api/openapi.yaml) (đồng bộ với Frontend `2hand-shop/contracts/openapi.yaml`). Endpoint mới/đổi phải cập nhật OpenAPI trước hoặc cùng PR.
+2. **API contract là SSOT HTTP**: [`docs/02-api/openapi.yaml`](docs/02-api/openapi.yaml) (đồng bộ với Frontend `HK Small Store/contracts/openapi.yaml`). Endpoint mới/đổi phải cập nhật OpenAPI trước hoặc cùng PR.
 3. **Layering**: Controller → Service → Repository. Controller không query DB. Repository không chứa business rule. Service không set HTTP status.
 4. **1-of-1 invariant**: Tạo/hủy/trả đơn đụng tồn kho phải trong `db.transaction` + `SELECT ... FOR UPDATE`. Xem [`docs/04-domain/order-flow.md`](docs/04-domain/order-flow.md) và [`docs/03-database/transactions.md`](docs/03-database/transactions.md).
 5. **Snapshot chính sách**: Cọc, phí ship, return fee, hold, `policy_version` snapshot vào `orders` lúc tạo. Không đọc lại `shop_settings` để tính đơn cũ.

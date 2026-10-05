@@ -1,7 +1,7 @@
 # 005 — Cấu hình kinh doanh động, Snapshot đơn hàng và Audit Policy
 
 Trạng thái: Đã chốt ngày 2026-10-03.  
-Nguồn: Thỏa thuận nâng cấp nghiệp vụ cài đặt linh hoạt cho chủ shop Son. Đồng bộ với [ADR 005 Frontend](../../../2hand-shop/docs/adr/005-configurable-business-settings.md).
+Nguồn: Thỏa thuận nâng cấp nghiệp vụ cài đặt linh hoạt cho chủ shop Son. Đồng bộ với [ADR 005 Frontend](../../../HK Small Store/docs/adr/005-configurable-business-settings.md).
 
 ---
 
