@@ -31,7 +31,7 @@ Health check: `GET /api/health`
 8. **Không log PII** (SĐT, email, địa chỉ, token thô). Xem [`docs/05-quality/security.md`](docs/05-quality/security.md).
 9. **Không thêm dependency** nếu stdlib / package đã có đủ việc.
 10. **Không sửa** `docs/adr/` đã chốt trừ khi viết ADR mới supersede.
-11. **Feature ship**: Khi `docs/features/<slug>/` xong (AC + check xanh) → **commit rồi push** trước khi mở feature tiếp theo. Chi tiết: [`.cursor/rules/feature-ship.mdc`](.cursor/rules/feature-ship.mdc).
+11. **Git + feature ship**: Làm việc trên `feat/<slug>` (không commit thẳng `main`). Feature xong → commit → push nhánh → PR → merge `main` trước khi mở feature kế. SSOT: [`docs/06-operations/git-workflow.md`](docs/06-operations/git-workflow.md), [`.cursor/rules/git-workflow.mdc`](.cursor/rules/git-workflow.mdc), [`.cursor/rules/feature-ship.mdc`](.cursor/rules/feature-ship.mdc).
 
 ## Docs map
 
@@ -43,7 +43,7 @@ Health check: `GET /api/health`
 | [`docs/03-database/`](docs/03-database/) | Data model, `drizzle-conventions.md`, migrations, transactions |
 | [`docs/04-domain/`](docs/04-domain/) | Item rules, order state machine, payment/COD |
 | [`docs/05-quality/`](docs/05-quality/) | Testing, security, performance, DoD |
-| [`docs/06-operations/`](docs/06-operations/) | Setup, deploy, observability, [agent stack](docs/06-operations/agent-stack.md) |
+| [`docs/06-operations/`](docs/06-operations/) | Setup, [git workflow](docs/06-operations/git-workflow.md), deploy, observability, [agent stack](docs/06-operations/agent-stack.md) |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records (000–008+) |
 | [`docs/features/`](docs/features/) | Spec / plan / tasks theo feature |
 | [`docs/superpowers/`](docs/superpowers/) | Design specs & implementation plans (agent workflow) |

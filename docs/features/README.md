@@ -31,4 +31,4 @@ Không tạo folder marketplace (`wishlist`, `buyer-seller-chat`, …) — ngoà
 
 ## Ship
 
-Xong 1 feature (AC + check xanh) → **commit + push** trước khi bắt đầu slug kế ([`feature-ship`](../../.cursor/rules/feature-ship.mdc)).
+Xong 1 feature (AC + check xanh) → nhánh `feat/<slug>` → **commit + push + PR merge `main`** trước khi bắt đầu slug kế ([`git-workflow`](../06-operations/git-workflow.md), [`feature-ship`](../../.cursor/rules/feature-ship.mdc)).
