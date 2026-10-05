@@ -5,9 +5,7 @@ import { validate } from '../middlewares/validate.middleware.js';
 import { adminLoginSchema } from '../dtos/auth.dto.js';
 import { itemUpsertSchema, queryAdminItemsSchema, updateItemStatusSchema } from '../dtos/item.dto.js';
 import { updateSettingsSchema } from '../dtos/setting.dto.js';
-<<<<<<< HEAD
 import { adminUploadMiddleware } from '../middlewares/upload.middleware.js';
-=======
 import {
   adminOrdersQuerySchema,
   confirmOrderBodySchema,
@@ -17,7 +15,6 @@ import {
   updateOrderStatusBodySchema,
   updatePaymentBodySchema,
 } from '../dtos/admin-order.dto.js';
->>>>>>> origin/main
 
 const router = Router();
 
