@@ -1,5 +1,5 @@
 ---
-description: After each completed feature, commit and push before starting the next
+description: After each completed feature, ship via branch + PR before starting the next
 alwaysApply: true
 ---
 
@@ -7,8 +7,10 @@ alwaysApply: true
 
 Khi một feature trong `docs/features/<slug>/` đạt acceptance (tasks/spec tick xong, typecheck + runnable check xanh):
 
-1. **Commit** ngay — message nêu *why* (slug feature), HEREDOC; không commit `.env`/secret.
-2. **Push** `origin` branch hiện tại (`git push -u` nếu chưa track).
-3. Chỉ sau đó mới mở feature tiếp theo trong `docs/features/README.md`.
+1. Đảm bảo đang ở nhánh `feat/<slug>` (không commit lên `main`). Chi tiết: [`git-workflow.mdc`](./git-workflow.mdc) + [`docs/06-operations/git-workflow.md`](../../docs/06-operations/git-workflow.md).
+2. **Commit** trên nhánh đó — message nêu *why* (slug), HEREDOC; không commit `.env`/secret.
+3. **Push** nhánh: `git push -u origin HEAD`.
+4. **Mở PR → merge vào `main`** (`gh pr create`, ưu tiên squash). Pull `main` sau merge.
+5. Chỉ sau đó mới mở feature tiếp theo trong `docs/features/README.md`.
 
-Không để nhiều feature xong dồn một commit trừ khi user yêu cầu gộp. Không bắt đầu feature mới khi working tree còn diff của feature vừa xong.
+Không gộp nhiều feature vào một PR trừ khi user yêu cầu. Không bắt đầu feature mới khi PR feature vừa xong chưa merge (hoặc working tree còn diff của feature đó).

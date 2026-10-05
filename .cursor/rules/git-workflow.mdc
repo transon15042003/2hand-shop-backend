@@ -1,0 +1,21 @@
+---
+description: Git branching, PR, and merge rules for 2hand-shop-backend
+alwaysApply: true
+---
+
+# Git workflow
+
+Full doc: [`docs/06-operations/git-workflow.md`](../../docs/06-operations/git-workflow.md).
+
+## Always
+
+1. Start from updated `main`: `git checkout main && git pull`.
+2. Work on `feat/<slug>`, `fix/<short>`, `chore/<short>`, or `docs/<short>` — **never commit directly to `main`** unless the user explicitly allows a hotfix.
+3. One feature slug → one branch → one PR. Push the branch; open PR with `gh pr create`.
+4. Prefer **squash merge** into `main`. Then pull `main` locally and delete the feature branch.
+5. Do not start the next feature until the previous PR is merged (or the user says otherwise).
+6. No force-push to `main`. No interactive rebase. No secrets in commits.
+
+## With feature-ship
+
+When `docs/features/<slug>/` AC pass: commit on the feature branch → push → PR → merge → only then open the next slug. See [`feature-ship.mdc`](./feature-ship.mdc).
