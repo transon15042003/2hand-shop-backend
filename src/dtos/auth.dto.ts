@@ -35,5 +35,32 @@ export const changePasswordSchema = z.object({
 });
 
 export const adminLoginSchema = z.object({
-  password: z.string().min(1, 'Vui lòng nhập mã truy cập quản trị'),
+  username: z.string().min(1, 'Vui lòng nhập tên đăng nhập'),
+  password: z.string().min(1, 'Vui lòng nhập mật khẩu'),
 });
+
+export const createAdminSchema = z.object({
+  username: z.string().min(3, 'Username phải có ít nhất 3 ký tự'),
+  password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
+  display_name: z.string().min(1, 'Vui lòng nhập tên hiển thị'),
+  role: z.enum(['owner', 'staff']),
+  permissions: z
+    .array(
+      z.enum(['items', 'orders', 'deposits', 'batches', 'cash_flow', 'settings', 'manage_admins'])
+    )
+    .optional(),
+});
+
+export const updateAdminSchema = z
+  .object({
+    display_name: z.string().min(1).optional(),
+    role: z.enum(['owner', 'staff']).optional(),
+    permissions: z
+      .array(
+        z.enum(['items', 'orders', 'deposits', 'batches', 'cash_flow', 'settings', 'manage_admins'])
+      )
+      .optional(),
+    password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự').optional(),
+    is_active: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'Không có trường nào để cập nhật' });

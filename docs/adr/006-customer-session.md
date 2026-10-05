@@ -68,6 +68,6 @@ Khi khách hàng truy cập API kèm cookie phiên:
 ## 5. Phân biệt với Phiên Admin
 
 - Phân hệ Admin có quyền can thiệp vào tiền bạc và dữ liệu khách hàng nên áp dụng cơ chế ngắn hạn và nghiêm ngặt hơn:
-  - Admin đăng nhập bằng tài khoản quản trị và mật khẩu.
-  - Sử dụng Admin JWT / Signed Token độc lập.
+  - Admin đăng nhập bằng **username + mật khẩu** (bảng `admin_users`).
+  - JWT riêng (`typ=admin`, TTL ~12h) + cookie phiên trình duyệt; RBAC `owner` / `staff` + permissions.
   - Hết hạn ngắn hoặc theo phiên làm việc, không áp dụng cơ chế 400 ngày như khách hàng.

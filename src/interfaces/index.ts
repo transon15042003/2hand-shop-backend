@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import type { AdminPermission } from '../constants/admin-permissions.js';
 
 export interface CustomerSessionPayload {
   customerId: string;
@@ -6,9 +7,12 @@ export interface CustomerSessionPayload {
   email: string;
 }
 
-export interface AdminSessionPayload {
-  role: 'admin';
+export interface AuthenticatedAdmin {
+  id: string;
   username: string;
+  displayName: string;
+  role: 'owner' | 'staff';
+  permissions: AdminPermission[];
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -21,6 +25,7 @@ export interface AuthenticatedRequest extends Request {
   /** Raw session cookie/Bearer token (for logout-all / change-password). */
   sessionToken?: string;
   isAdmin?: boolean;
+  admin?: AuthenticatedAdmin;
 }
 
 export interface ApiResponse<T = any> {
