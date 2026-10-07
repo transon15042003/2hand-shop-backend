@@ -26,6 +26,7 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 | [`hold-jobs-contract`](./hold-jobs-contract/) | Expire job + OpenAPI contract tests — **xong** (local verified) |
 | [`production-hardening`](./production-hardening/) | Helmet, rate limit, deploy — **xong** (local verified) |
 | [`openapi-fe-sync`](./openapi-fe-sync/) | Đồng bộ enum/contract với Frontend — **xong** (local verified) |
+| [`batch-costs-sale-item-mgmt`](./batch-costs-sale-item-mgmt/) | Kiện hàng đa chi phí, Sale sản phẩm & Quản trị tồn kho — **xong** (local verified) |
 
 Không tạo folder marketplace (`wishlist`, `buyer-seller-chat`, …) — ngoài phạm vi ADR 000.
 

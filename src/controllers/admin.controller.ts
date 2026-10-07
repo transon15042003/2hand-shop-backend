@@ -123,6 +123,69 @@ export class AdminController {
     }
   }
 
+  async applyItemDiscount(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await adminService.applyItemDiscount(req.params.id, req.body);
+      return res.status(HttpStatus.OK).json(item);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async removeItemDiscount(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await adminService.removeItemDiscount(req.params.id);
+      return res.status(HttpStatus.OK).json(item);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkDiscount(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.bulkDiscount(req.body);
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async bulkRemoveDiscount(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.bulkRemoveDiscount(req.body);
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteItem(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.deleteItem(req.params.id, req.query as any);
+      return res.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async discardItem(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await adminService.discardItem(req.params.id, req.body);
+      return res.status(HttpStatus.OK).json(item);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async reassignItemBatch(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await adminService.reassignItemBatch(req.params.id, req.body.target_batch_id);
+      return res.status(HttpStatus.OK).json(item);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getOrders(req: Request, res: Response, next: NextFunction) {
     try {
       const q = req.query as any;
@@ -273,6 +336,15 @@ export class AdminController {
     try {
       const batch = await adminService.createBatch(req.body);
       return res.status(HttpStatus.CREATED).json(batch);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateBatchCosts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const batch = await adminService.updateBatchCosts(req.params.id, req.body);
+      return res.status(HttpStatus.OK).json(batch);
     } catch (error) {
       next(error);
     }
