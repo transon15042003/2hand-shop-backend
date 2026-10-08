@@ -7,14 +7,14 @@ async function run() {
   console.log('--- Testing Email & Unverified Customer Auth Flow ---');
 
   // 1. Test EmailService direct methods
-  console.log('1. Testing EmailService templates (Mock fallback)...');
-  const otpSent = await emailService.sendRegistrationOtp('test-user@example.com', {
+  console.log('1. Testing EmailService templates (Mock/Resend)...');
+  const otpSent = await emailService.sendRegistrationOtp('delivered@resend.dev', {
     customerName: 'Nguyễn Văn Test',
     otp: '123456',
   });
   assert.equal(otpSent, true, 'sendRegistrationOtp should return true');
 
-  const orderEmailSent = await emailService.sendOrderConfirmed('test-user@example.com', {
+  const orderEmailSent = await emailService.sendOrderConfirmed('delivered@resend.dev', {
     orderCode: 'DH-241008-9999',
     customerName: 'Nguyễn Văn Test',
     items: [{ name: 'Áo sơ mi vintage', price: 250000 }],

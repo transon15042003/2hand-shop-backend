@@ -81,6 +81,11 @@ export class EmailService {
     try {
       // 1. Resend API
       if (appConfig.resendApiKey) {
+        const fromHeader =
+          appConfig.emailFrom && !appConfig.emailFrom.includes('@hksmallstore.com')
+            ? appConfig.emailFrom
+            : 'HK Small Store <onboarding@resend.dev>';
+
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -88,7 +93,7 @@ export class EmailService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: appConfig.emailFrom,
+            from: fromHeader,
             to: [to],
             subject,
             html,
