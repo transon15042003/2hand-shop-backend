@@ -322,7 +322,7 @@ paths:
     post:
       operationId: registerCustomer
       summary: Đăng ký tài khoản khách hàng mới
-      description: Tạo tài khoản thành viên mới bằng tên, số điện thoại, email và mật khẩu. Hệ thống sẽ tạo mã OTP xác thực 6 số gửi về email.
+      description: Tạo tài khoản thành viên mới bằng tên, số điện thoại, email và mật khẩu. Hệ thống sẽ tạo mã OTP xác thực 6 số gửi về email. Khách hàng được đăng ký thành công ngay, nhận cookie phiên và thông báo xác thực email để nhận thông tin đơn hàng.
       tags:
         - Customer Auth
       security: []
@@ -426,7 +426,7 @@ paths:
       operationId: loginCustomer
       summary: Đăng nhập tài khoản khách hàng
       description: |
-        Đăng nhập bằng Email hoặc Số điện thoại kèm Mật khẩu. Yêu cầu tài khoản đã xác thực email.
+        Đăng nhập bằng Email hoặc Số điện thoại kèm Mật khẩu. Hỗ trợ khách hàng đăng nhập kể cả khi email chưa xác thực (kèm thông báo nhắc xác thực email để nhận cập nhật đơn hàng).
         Phiên lâu dài (ADR 006): trả cookie httpOnly `hk_small_store_customer_session` (400 ngày, gia hạn khi dùng); khách ở trạng thái đăng nhập trên thiết bị đó tới khi bấm Đăng xuất.
       tags:
         - Customer Auth
@@ -1095,6 +1095,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+    delete:
+      operationId: deleteAdminItem
+      summary: Xóa vĩnh viễn món hàng chưa từng phát sinh đơn
+      description: |
+        Chỉ cho phép xóa khi món chưa từng nằm trong bất kỳ đơn hàng nào (`order_items`).
+        Nếu món đã từng phát sinh đơn hàng, trả về 409 `ITEM_IN_ORDER` (khuyên dùng chức năng discard / hủy hao hụt).
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: refund_capital
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: refund_amount
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Xóa thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  deleted_id:
+                    type: string
+                    example: "KN2410-001"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /admin/items/{id}/status:
     patch:
       operationId: updateAdminItemStatus
@@ -1139,6 +1188,208 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /admin/items/{id}/discount:
+    post:
+      operationId: applyAdminItemDiscount
+      summary: Áp dụng giảm giá cho một món hàng cụ thể
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyItemDiscountRequest'
+      responses:
+        '200':
+          description: Đã áp dụng giảm giá thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/items/{id}/remove-discount:
+    post:
+      operationId: removeAdminItemDiscount
+      summary: Hủy giảm giá, khôi phục giá gốc cho món
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Đã khôi phục giá gốc thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/items/{id}/discard:
+    post:
+      operationId: discardAdminItem
+      summary: Tiêu hủy / loại bỏ món hàng do hư hỏng, rách nát hoặc mất đồ
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscardItemRequest'
+      responses:
+        '200':
+          description: Đã đánh dấu loại bỏ món thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/items/{id}/batch:
+    patch:
+      operationId: reassignAdminItemBatch
+      summary: Chuyển món sang kiện hàng khác hoặc gỡ khỏi kiện
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignBatchRequest'
+      responses:
+        '200':
+          description: Đã chuyển kiện thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemAdminDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /admin/items/bulk-discount:
+    post:
+      operationId: bulkDiscountAdminItems
+      summary: Áp dụng giảm giá hàng loạt theo danh sách id, theo mã kiện hoặc theo phân loại
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkDiscountRequest'
+      responses:
+        '200':
+          description: Áp dụng giảm giá hàng loạt thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_found:
+                    type: integer
+                  eligible_count:
+                    type: integer
+                  updated_count:
+                    type: integer
+                  skipped_count:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/items/bulk-remove-discount:
+    post:
+      operationId: bulkRemoveDiscountAdminItems
+      summary: Hủy giảm giá hàng loạt theo danh sách id, mã kiện hoặc phân loại
+      tags:
+        - Admin Items
+      security:
+        - AdminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkRemoveDiscountRequest'
+      responses:
+        '200':
+          description: Khôi phục giá gốc hàng loạt thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_found:
+                    type: integer
+                  restored_count:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /admin/uploads:
     post:
@@ -1735,6 +1986,44 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /admin/batches/{id}/costs:
+    patch:
+      operationId: updateAdminBatchCosts
+      summary: Cập nhật chi phí phát sinh hoặc điều chỉnh thông tin tài chính kiện hàng
+      description: |
+        Cho phép cập nhật vốn nhập, phí ship kiện, phí xử lý, chi phí khác.
+        Chênh lệch chi phí tổng sẽ được tự động ghi nhận vào dòng tiền (`cash_flow_entries`) loại `batch_adjustment`.
+      tags:
+        - Admin Batches
+      security:
+        - AdminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Mã kiện hàng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBatchCostsRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ==========================================
   # ADMIN CASH FLOW & COD RECONCILIATION
   # ==========================================
@@ -2007,8 +2296,9 @@ components:
         - `shelf`: Đang trên kệ (Khách có thể xem và đặt mua)
         - `reserved`: Đang giữ chỗ (Đã nằm trong đơn hàng chờ xử lý)
         - `sold`: Đã bán (Đơn hàng đã hoàn tất)
+        - `discarded`: Đã loại bỏ / tiêu hủy do hư hỏng, rách mốc, hoặc thất thoát
         (`archived` đã bỏ theo ADR 003 D4.)
-      enum: [draft, shelf, reserved, sold]
+      enum: [draft, shelf, reserved, sold, discarded]
 
     OrderStatus:
       type: string
@@ -2139,6 +2429,20 @@ components:
         price:
           type: integer
           example: 320000
+        original_price:
+          type: integer
+          nullable: true
+          description: Giá gốc trước khi giảm giá (VND). Null nếu món không trong đợt sale.
+          example: 400000
+        is_on_sale:
+          type: boolean
+          description: Đang có chương trình giảm giá hay không
+          example: true
+        discount_percent:
+          type: integer
+          nullable: true
+          description: Tỷ lệ phần trăm giảm giá (1-99). Null nếu không giảm giá.
+          example: 20
         size:
           type: string
           example: "M (Form suông)"
@@ -2216,6 +2520,15 @@ components:
               nullable: true
               description: Giá vốn của món (VND). `null` khi tính theo kiện (ADR 002).
               example: 120000
+            discard_reason:
+              type: string
+              nullable: true
+              description: Lý do hủy bỏ / tiêu hủy nếu status là discarded
+              example: "Vết ố mốc nặng không xử lý được"
+            discarded_at:
+              type: string
+              format: date-time
+              nullable: true
             created_at:
               type: string
               format: date-time
@@ -3104,14 +3417,22 @@ components:
           type: integer
           description: Vốn nhập kiện ban đầu (VND)
           example: 18000000
+        shipping_cost:
+          type: integer
+          description: Chi phí vận chuyển kiện về kho (VND)
+          example: 500000
         processing_cost:
           type: integer
           description: Chi phí giặt là, bảo dưỡng xử lý lỗi (VND)
           example: 1200000
+        other_cost:
+          type: integer
+          description: Chi phí phát sinh khác của kiện (VND)
+          example: 200000
         total_investment:
           type: integer
-          description: Tổng vốn đầu tư = Vốn nhập + Chi phí xử lý (VND)
-          example: 19200000
+          description: Tổng vốn đầu tư = Vốn nhập + Phí ship kiện + Chi phí xử lý + Chi phí khác (VND)
+          example: 19900000
         total_items_count:
           type: integer
           description: Tổng số món bóc tách từ kiện
@@ -3135,11 +3456,11 @@ components:
         list_vs_investment:
           type: integer
           description: catalog_list_total − total_investment (dương = giá bán tổng trên vốn kiện)
-          example: 12800000
+          example: 12100000
         break_even_target:
           type: integer
           description: Cột mốc hoàn vốn an toàn (thường là 130% vốn đầu tư)
-          example: 24960000
+          example: 25870000
         remaining_to_break_even:
           type: integer
           description: Số tiền còn thiếu để đạt mốc hoàn vốn (VND)
@@ -3147,8 +3468,17 @@ components:
         is_broken_even:
           type: boolean
           example: true
+        estimated_cost_per_item:
+          type: integer
+          description: Giá vốn bình quân ước tính mỗi món = total_investment / total_items_count (VND)
+          example: 442222
         status:
           $ref: '#/components/schemas/BatchStatus'
+        notes:
+          type: string
+          nullable: true
+          description: Ghi chú kiện hàng
+          example: "Kiện lấy từ kho Phnom Penh"
         categories:
           type: array
           description: Phân loại suy ra từ món trong kiện, sắp theo số món giảm dần
@@ -3161,6 +3491,7 @@ components:
             - shelf
             - reserved
             - sold
+            - discarded
           properties:
             draft:
               type: integer
@@ -3170,10 +3501,13 @@ components:
               example: 12
             reserved:
               type: integer
-              example: 1
+              example: 2
             sold:
               type: integer
-              example: 5
+              example: 26
+            discarded:
+              type: integer
+              example: 2
 
     CreateBatchRequest:
       type: object
@@ -3198,10 +3532,133 @@ components:
           type: integer
           minimum: 0
           example: 15000000
+        shipping_cost:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 500000
         processing_cost:
           type: integer
           minimum: 0
+          default: 0
           example: 800000
+        other_cost:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 200000
+        target_margin_percent:
+          type: integer
+          minimum: 0
+          default: 30
+          example: 30
+        notes:
+          type: string
+          nullable: true
+          example: "Kiện lấy từ kho Phnom Penh"
+
+    UpdateBatchCostsRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        initial_capital:
+          type: integer
+          minimum: 0
+        shipping_cost:
+          type: integer
+          minimum: 0
+        processing_cost:
+          type: integer
+          minimum: 0
+        other_cost:
+          type: integer
+          minimum: 0
+        target_margin_percent:
+          type: integer
+          minimum: 0
+          maximum: 500
+        notes:
+          type: string
+
+    ApplyItemDiscountRequest:
+      type: object
+      properties:
+        discount_percent:
+          type: integer
+          minimum: 1
+          maximum: 99
+          description: Tỷ lệ phần trăm giảm giá (ví dụ 20 cho giảm 20%)
+          example: 20
+        sale_price:
+          type: integer
+          minimum: 0
+          description: Hoặc giá bán sau giảm cụ thể (VND)
+          example: 250000
+        allow_below_cost:
+          type: boolean
+          default: false
+          description: Cho phép bán dưới giá vốn (xả lỗ)
+          example: false
+
+    BulkDiscountRequest:
+      type: object
+      required:
+        - discount_percent
+      properties:
+        item_ids:
+          type: array
+          items:
+            type: string
+        batch_id:
+          type: string
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+        discount_percent:
+          type: integer
+          minimum: 1
+          maximum: 99
+          example: 15
+        allow_below_cost:
+          type: boolean
+          default: false
+
+    BulkRemoveDiscountRequest:
+      type: object
+      properties:
+        item_ids:
+          type: array
+          items:
+            type: string
+        batch_id:
+          type: string
+        category:
+          $ref: '#/components/schemas/ItemCategory'
+
+    DiscardItemRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          description: Lý do hủy / loại bỏ món
+          example: "Vết rách lớn ở lưng không phục hồi được"
+        write_off_loss:
+          type: boolean
+          default: true
+          description: Có ghi nhận giá vốn vào chi phí thất thoát dòng tiền hay không
+
+    ReassignBatchRequest:
+      type: object
+      required:
+        - target_batch_id
+      properties:
+        target_batch_id:
+          type: string
+          nullable: true
+          description: Mã kiện hàng mới cần chuyển sang, hoặc null để gỡ khỏi kiện
+          example: "KN2411"
 
     BatchDetail:
       allOf:
@@ -3578,6 +4035,11 @@ components:
           type: string
           description: "Mã OTP mẫu phục vụ kiểm thử nhanh trong môi trường phát triển"
           example: "868868"
+        token:
+          type: string
+          description: "Session token phiên nếu khách được cấp đăng nhập ngay"
+        customer:
+          $ref: '#/components/schemas/CustomerProfile'
 
     CustomerVerifyEmailRequest:
       type: object
@@ -3622,6 +4084,10 @@ components:
           example: "mock-jwt-customer-token"
         customer:
           $ref: '#/components/schemas/CustomerProfile'
+        verification_notice:
+          type: string
+          description: "Thông báo nhắc nhở xác thực email nếu email chưa xác thực"
+          example: "Để nhận thông tin về đơn hàng, vui lòng xác thực email."
 
     CustomerProfile:
       type: object

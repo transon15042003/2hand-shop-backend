@@ -3,7 +3,17 @@ import { adminController } from '../controllers/admin.controller.js';
 import { requireAdminAuth, requirePermission } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { adminLoginSchema, createAdminSchema, updateAdminSchema } from '../dtos/auth.dto.js';
-import { itemUpsertSchema, queryAdminItemsSchema, updateItemStatusSchema } from '../dtos/item.dto.js';
+import {
+  applyItemDiscountSchema,
+  bulkDiscountSchema,
+  bulkRemoveDiscountSchema,
+  deleteItemQuerySchema,
+  discardItemSchema,
+  itemUpsertSchema,
+  queryAdminItemsSchema,
+  reassignBatchSchema,
+  updateItemStatusSchema,
+} from '../dtos/item.dto.js';
 import { updateSettingsSchema } from '../dtos/setting.dto.js';
 import { adminUploadMiddleware } from '../middlewares/upload.middleware.js';
 import {
@@ -19,6 +29,7 @@ import {
   cashFlowSummaryQuerySchema,
   createBatchBodySchema,
   createReconciliationBodySchema,
+  updateBatchCostsBodySchema,
 } from '../dtos/batch.dto.js';
 import { adminLoginRateLimiter } from '../middlewares/rate-limit.middleware.js';
 
@@ -75,6 +86,47 @@ router.patch(
   requirePermission('items'),
   validate({ body: updateItemStatusSchema }),
   (req, res, next) => adminController.updateItemStatus(req, res, next)
+);
+router.post(
+  '/items/bulk-discount',
+  requirePermission('items'),
+  validate({ body: bulkDiscountSchema }),
+  (req, res, next) => adminController.bulkDiscount(req, res, next)
+);
+router.post(
+  '/items/bulk-remove-discount',
+  requirePermission('items'),
+  validate({ body: bulkRemoveDiscountSchema }),
+  (req, res, next) => adminController.bulkRemoveDiscount(req, res, next)
+);
+router.post(
+  '/items/:id/discount',
+  requirePermission('items'),
+  validate({ body: applyItemDiscountSchema }),
+  (req, res, next) => adminController.applyItemDiscount(req, res, next)
+);
+router.post(
+  '/items/:id/remove-discount',
+  requirePermission('items'),
+  (req, res, next) => adminController.removeItemDiscount(req, res, next)
+);
+router.delete(
+  '/items/:id',
+  requirePermission('items'),
+  validate({ query: deleteItemQuerySchema }),
+  (req, res, next) => adminController.deleteItem(req, res, next)
+);
+router.post(
+  '/items/:id/discard',
+  requirePermission('items'),
+  validate({ body: discardItemSchema }),
+  (req, res, next) => adminController.discardItem(req, res, next)
+);
+router.patch(
+  '/items/:id/batch',
+  requirePermission('items'),
+  validate({ body: reassignBatchSchema }),
+  (req, res, next) => adminController.reassignItemBatch(req, res, next)
 );
 router.post('/uploads', requirePermission('items'), adminUploadMiddleware, (req, res, next) =>
   adminController.uploadImage(req, res, next)
@@ -153,6 +205,12 @@ router.post(
 );
 router.get('/batches/:id', requirePermission('batches'), (req, res, next) =>
   adminController.getBatchDetail(req, res, next)
+);
+router.patch(
+  '/batches/:id/costs',
+  requirePermission('batches'),
+  validate({ body: updateBatchCostsBodySchema }),
+  (req, res, next) => adminController.updateBatchCosts(req, res, next)
 );
 
 router.get('/settings', requirePermission('settings'), (req, res, next) =>

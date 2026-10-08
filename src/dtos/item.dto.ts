@@ -56,7 +56,7 @@ export const queryPublicItemsSchema = z.object({
 });
 
 export const queryAdminItemsSchema = z.object({
-  status: z.enum(['draft', 'shelf', 'reserved', 'sold']).optional(),
+  status: z.enum(['draft', 'shelf', 'reserved', 'sold', 'discarded']).optional(),
   category: z.enum(itemCategories).optional(),
   condition: z.enum(itemConditions).optional(),
   batch_id: z.string().optional(),
@@ -64,6 +64,55 @@ export const queryAdminItemsSchema = z.object({
   sort: z.enum(['newest', 'oldest', 'price_asc', 'price_desc', 'name_asc', 'name_desc']).optional().default('newest'),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+export const applyItemDiscountSchema = z
+  .object({
+    discount_percent: z.number().int().min(1).max(99).optional(),
+    sale_price: z.number().int().nonnegative().optional(),
+    allow_below_cost: z.boolean().optional().default(false),
+  })
+  .refine(
+    (data) => data.discount_percent !== undefined || data.sale_price !== undefined,
+    { message: 'Cần nhập discount_percent hoặc sale_price' }
+  );
+
+export const bulkDiscountSchema = z
+  .object({
+    item_ids: z.array(z.string().min(1)).optional(),
+    batch_id: z.string().min(1).optional(),
+    category: z.enum(itemCategories).optional(),
+    discount_percent: z.number().int().min(1).max(99, 'Tỷ lệ giảm giá phải từ 1% đến 99%'),
+    allow_below_cost: z.boolean().optional().default(false),
+  })
+  .refine(
+    (data) => (data.item_ids && data.item_ids.length > 0) || data.batch_id || data.category,
+    { message: 'Cần chọn ít nhất item_ids, batch_id hoặc category để áp dụng sale' }
+  );
+
+export const bulkRemoveDiscountSchema = z
+  .object({
+    item_ids: z.array(z.string().min(1)).optional(),
+    batch_id: z.string().min(1).optional(),
+    category: z.enum(itemCategories).optional(),
+  })
+  .refine(
+    (data) => (data.item_ids && data.item_ids.length > 0) || data.batch_id || data.category,
+    { message: 'Cần chọn ít nhất item_ids, batch_id hoặc category để kết thúc sale' }
+  );
+
+export const discardItemSchema = z.object({
+  reason: z.string().min(1, 'Vui lòng nhập lý do hủy / hỏng món hàng'),
+  write_off_loss: z.boolean().optional().default(true),
+});
+
+export const reassignBatchSchema = z.object({
+  target_batch_id: z.string().nullable(),
+});
+
+export const deleteItemQuerySchema = z.object({
+  refund_capital: z.enum(['true', 'false']).transform((v) => v === 'true').optional().default('false'),
+  refund_amount: z.coerce.number().int().nonnegative().optional(),
 });
 
 /** @deprecated alias — prefer itemUpsertSchema */

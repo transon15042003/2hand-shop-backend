@@ -10,4 +10,12 @@ export const appConfig = {
   isDev: (process.env.NODE_ENV || 'development') === 'development',
   /** Hold expire poll interval. Default 3 minutes; set 0 to disable in-process scheduler. */
   holdExpireIntervalMs: parseInt(process.env.HOLD_EXPIRE_INTERVAL_MS ?? '180000', 10),
+  /** Email sender configuration */
+  emailFrom: process.env.EMAIL_FROM || 'HK Small Store <no-reply@hksmallstore.com>',
+  resendApiKey: process.env.RESEND_API_KEY,
+  smtpHost: process.env.SMTP_HOST,
+  smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
+  smtpSecure: process.env.SMTP_SECURE === 'true',
+  smtpUser: process.env.SMTP_USER,
+  smtpPass: process.env.SMTP_PASS,
 };

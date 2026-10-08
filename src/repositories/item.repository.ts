@@ -1,6 +1,6 @@
 import { db } from '../configs/database.js';
-import { items } from '../db/schema.js';
-import { eq, and, sql, desc, asc, gte, lte, or, ilike, count } from 'drizzle-orm';
+import { items, orderItems } from '../db/schema.js';
+import { eq, and, sql, desc, asc, gte, lte, or, ilike, count, inArray } from 'drizzle-orm';
 
 export class ItemRepository {
   async findById(id: string) {
@@ -93,27 +93,64 @@ export class ItemRepository {
     const on_shelf = map.shelf ?? 0;
     const reserved = map.reserved ?? 0;
     const sold = map.sold ?? 0;
+    const discarded = map.discarded ?? 0;
     return {
-      total_items: draft + on_shelf + reserved + sold,
+      total_items: draft + on_shelf + reserved + sold + discarded,
       on_shelf,
       reserved,
       sold,
       draft,
+      discarded,
     };
   }
 
-  async create(data: typeof items.$inferInsert) {
-    const [created] = await db.insert(items).values(data).returning();
+  async create(data: typeof items.$inferInsert, tx: any = db) {
+    const [created] = await tx.insert(items).values(data).returning();
     return created;
   }
 
-  async update(id: string, data: Partial<typeof items.$inferInsert>) {
-    const [updated] = await db
+  async update(id: string, data: Partial<typeof items.$inferInsert>, tx: any = db) {
+    const [updated] = await tx
       .update(items)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(items.id, id))
       .returning();
     return updated;
+  }
+
+  async delete(id: string, tx: any = db) {
+    const [deleted] = await tx.delete(items).where(eq(items.id, id)).returning();
+    return deleted;
+  }
+
+  async countOrderItems(itemId: string, tx: any = db): Promise<number> {
+    const res = await tx
+      .select({ count: sql<number>`count(*)` })
+      .from(orderItems)
+      .where(eq(orderItems.itemId, itemId));
+    return Number(res[0]?.count ?? 0);
+  }
+
+  async findItemsForDiscount(
+    params: { itemIds?: string[]; batchId?: string; category?: string },
+    tx: any = db
+  ) {
+    const conditions = [];
+    if (params.itemIds && params.itemIds.length > 0) {
+      conditions.push(inArray(items.id, params.itemIds));
+    }
+    if (params.batchId) {
+      conditions.push(eq(items.batchId, params.batchId));
+    }
+    if (params.category) {
+      conditions.push(eq(items.category, params.category as any));
+    }
+    if (conditions.length === 0) return [];
+
+    return await tx
+      .select()
+      .from(items)
+      .where(and(...conditions));
   }
 }
 

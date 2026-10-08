@@ -45,6 +45,7 @@ export const itemStatusEnum = pgEnum('item_status', [
   'shelf',
   'reserved',
   'sold',
+  'discarded',
 ]);
 
 export const orderStatusEnum = pgEnum('order_status', [
@@ -138,7 +139,9 @@ export const batches = pgTable('batches', {
   name: varchar('name', { length: 255 }).notNull(),
   importDate: date('import_date').notNull(),
   initialCapital: integer('initial_capital').notNull(),
+  shippingCost: integer('shipping_cost').notNull().default(0),
   processingCost: integer('processing_cost').notNull().default(0),
+  otherCost: integer('other_cost').notNull().default(0),
   targetMarginPercent: integer('target_margin_percent').notNull().default(30),
   status: batchStatusEnum('status').notNull().default('active'),
   notes: text('notes'),
@@ -163,6 +166,8 @@ export const items = pgTable('items', {
   images: jsonb('images').$type<{ url: string; alt: string }[]>().notNull().default([]),
   defectDescription: text('defect_description'),
   defectImages: jsonb('defect_images').$type<{ url: string; alt: string }[]>().default([]),
+  discardReason: text('discard_reason'),
+  discardedAt: timestamp('discarded_at', { withTimezone: true }),
   reservedUntil: timestamp('reserved_until', { withTimezone: true }),
   reservedByCustomerPhone: varchar('reserved_by_customer_phone', { length: 20 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),

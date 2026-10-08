@@ -11,12 +11,21 @@ function normalizeImages(raw: unknown): { url: string; alt: string }[] {
 
 export function toPublicSummary(row: ItemRow) {
   const images = normalizeImages(row.images);
+  const isOnSale = Boolean(row.originalPrice && row.originalPrice > row.price);
+  const discountPercent =
+    isOnSale && row.originalPrice
+      ? Math.round(((row.originalPrice - row.price) / row.originalPrice) * 100)
+      : null;
+
   return {
     id: row.id,
     name: row.name,
     category: row.category,
     condition: row.condition,
     price: row.price,
+    original_price: row.originalPrice ?? null,
+    is_on_sale: isOnSale,
+    discount_percent: discountPercent,
     size: row.size,
     main_image: images[0]?.url ?? '',
     status: row.status,
@@ -50,6 +59,8 @@ export function toAdminDetail(row: ItemRow) {
     ...toPublicDetail(row),
     batch_id: row.batchId ?? '',
     cost_price: row.costPrice ?? null,
+    discard_reason: row.discardReason ?? null,
+    discarded_at: row.discardedAt ? row.discardedAt.toISOString() : null,
     created_at: (row.createdAt ?? new Date()).toISOString(),
     updated_at: (row.updatedAt ?? new Date()).toISOString(),
   };

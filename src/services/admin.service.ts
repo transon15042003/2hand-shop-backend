@@ -15,6 +15,8 @@ import { appendTimeline, toAdminOrderDetail, toAdminOrderSummary } from '../util
 import { depositWasReceived } from '../utils/deposit-status.util.js';
 import { emptyBatchStats, toBatchSummary } from '../utils/batch-mapper.util.js';
 import type { CashFlowPeriod } from '../utils/cash-flow.util.js';
+import { emailService } from './email.service.js';
+import { uploadService } from './upload.service.js';
 
 async function nextItemId(batchCode: string) {
   const seq = await batchRepository.nextItemSeq(batchCode);
@@ -205,6 +207,17 @@ export class AdminService {
     }
 
     const updated = await itemRepository.update(id, row);
+
+    const oldImages = [
+      ...(Array.isArray(existing.images) ? existing.images : []),
+      ...(Array.isArray(existing.defectImages) ? existing.defectImages : []),
+    ];
+    const newImages = [
+      ...(Array.isArray(body.images) ? body.images : []),
+      ...(Array.isArray(body.defect_images) ? body.defect_images : []),
+    ];
+    await uploadService.cleanupOrphanedBlobs(oldImages, newImages);
+
     return toAdminDetail(updated!);
   }
 
@@ -243,6 +256,312 @@ export class AdminService {
     }
 
     const updated = await itemRepository.update(id, { status });
+    return toAdminDetail(updated!);
+  }
+
+  async applyItemDiscount(
+    id: string,
+    body: { discount_percent?: number; sale_price?: number; allow_below_cost?: boolean }
+  ) {
+    const existing = await itemRepository.findById(id);
+    if (!existing) {
+      throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
+    }
+
+    if (existing.status === 'reserved' || existing.status === 'sold') {
+      throw new AppError(
+        'Món đang giữ chỗ hoặc đã bán không đổi giá / sale được',
+        HttpStatus.CONFLICT,
+        ErrorCode.PRICE_LOCKED
+      );
+    }
+    if (existing.status === 'discarded') {
+      throw new AppError('Món đã hủy / loại bỏ không thể giảm giá', HttpStatus.BAD_REQUEST, ErrorCode.INVALID_TRANSITION);
+    }
+
+    const originalBase = existing.originalPrice ?? existing.price;
+    let salePrice: number;
+
+    if (body.discount_percent !== undefined) {
+      salePrice = Math.round((originalBase * (100 - body.discount_percent)) / 100 / 1000) * 1000;
+    } else if (body.sale_price !== undefined) {
+      salePrice = body.sale_price;
+    } else {
+      throw new AppError('Vui lòng nhập discount_percent hoặc sale_price', HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED);
+    }
+
+    if (salePrice >= originalBase) {
+      throw new AppError(
+        `Giá sale (${salePrice.toLocaleString()}đ) phải thấp hơn giá gốc (${originalBase.toLocaleString()}đ)`,
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.VALIDATION_FAILED
+      );
+    }
+
+    if (existing.costPrice && salePrice < existing.costPrice && !body.allow_below_cost) {
+      throw new AppError(
+        `Giá sale (${salePrice.toLocaleString()}đ) thấp hơn giá vốn (${existing.costPrice.toLocaleString()}đ). Vui lòng xác nhận nếu muốn xả lỗ.`,
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.SALE_BELOW_COST,
+        {
+          cost_price: existing.costPrice,
+          sale_price: salePrice,
+        }
+      );
+    }
+
+    const updated = await itemRepository.update(id, {
+      originalPrice: originalBase,
+      price: salePrice,
+    });
+    return toAdminDetail(updated!);
+  }
+
+  async removeItemDiscount(id: string) {
+    const existing = await itemRepository.findById(id);
+    if (!existing) {
+      throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
+    }
+
+    if (existing.status === 'reserved' || existing.status === 'sold') {
+      throw new AppError(
+        'Món đang giữ chỗ hoặc đã bán không khôi phục giá được',
+        HttpStatus.CONFLICT,
+        ErrorCode.PRICE_LOCKED
+      );
+    }
+
+    if (!existing.originalPrice) {
+      return toAdminDetail(existing);
+    }
+
+    const updated = await itemRepository.update(id, {
+      price: existing.originalPrice,
+      originalPrice: null,
+    });
+    return toAdminDetail(updated!);
+  }
+
+  async bulkDiscount(body: {
+    item_ids?: string[];
+    batch_id?: string;
+    category?: string;
+    discount_percent: number;
+    allow_below_cost?: boolean;
+  }) {
+    let batchId = body.batch_id;
+    if (batchId) {
+      batchId = await resolveBatchId(batchId);
+    }
+
+    const targetItems = await itemRepository.findItemsForDiscount({
+      itemIds: body.item_ids,
+      batchId,
+      category: body.category,
+    });
+
+    const eligibleItems = targetItems.filter(
+      (item: any) => item.status === 'draft' || item.status === 'shelf'
+    );
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+    const updatedIds: string[] = [];
+
+    await db.transaction(async (tx) => {
+      for (const item of eligibleItems) {
+        const originalBase = item.originalPrice ?? item.price;
+        const salePrice = Math.round((originalBase * (100 - body.discount_percent)) / 100 / 1000) * 1000;
+
+        if (salePrice >= originalBase) {
+          skippedCount++;
+          continue;
+        }
+
+        if (item.costPrice && salePrice < item.costPrice && !body.allow_below_cost) {
+          skippedCount++;
+          continue;
+        }
+
+        await itemRepository.update(
+          item.id,
+          {
+            originalPrice: originalBase,
+            price: salePrice,
+          },
+          tx
+        );
+        updatedCount++;
+        updatedIds.push(item.id);
+      }
+    });
+
+    return {
+      total_found: targetItems.length,
+      eligible_count: eligibleItems.length,
+      updated_count: updatedCount,
+      skipped_count: skippedCount,
+      updated_item_ids: updatedIds,
+    };
+  }
+
+  async bulkRemoveDiscount(body: {
+    item_ids?: string[];
+    batch_id?: string;
+    category?: string;
+  }) {
+    let batchId = body.batch_id;
+    if (batchId) {
+      batchId = await resolveBatchId(batchId);
+    }
+
+    const targetItems = await itemRepository.findItemsForDiscount({
+      itemIds: body.item_ids,
+      batchId,
+      category: body.category,
+    });
+
+    const onSaleItems = targetItems.filter(
+      (item: any) => (item.status === 'draft' || item.status === 'shelf') && item.originalPrice !== null
+    );
+
+    let restoredCount = 0;
+    await db.transaction(async (tx) => {
+      for (const item of onSaleItems) {
+        await itemRepository.update(
+          item.id,
+          {
+            price: item.originalPrice!,
+            originalPrice: null,
+          },
+          tx
+        );
+        restoredCount++;
+      }
+    });
+
+    return {
+      total_found: targetItems.length,
+      restored_count: restoredCount,
+    };
+  }
+
+  async deleteItem(
+    id: string,
+    options?: { refund_capital?: boolean; refund_amount?: number }
+  ) {
+    const existing = await itemRepository.findById(id);
+    if (!existing) {
+      throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
+    }
+
+    if (existing.status === 'reserved') {
+      throw new AppError(
+        'Món đang được giữ chỗ trong đơn hàng, không thể xóa.',
+        HttpStatus.CONFLICT,
+        ErrorCode.ITEM_IN_ACTIVE_ORDER
+      );
+    }
+
+    const orderCount = await itemRepository.countOrderItems(id);
+    if (orderCount > 0) {
+      throw new AppError(
+        'Món đã từng phát sinh đơn hàng, không thể xóa để bảo toàn lịch sử giao dịch. Hãy chọn chức năng Hủy / Hao hụt nếu sản phẩm bị hỏng.',
+        HttpStatus.CONFLICT,
+        ErrorCode.ITEM_IN_ORDER
+      );
+    }
+
+    const result = await db.transaction(async (tx) => {
+      await itemRepository.delete(id, tx);
+
+      if (options?.refund_capital && options.refund_amount && options.refund_amount > 0) {
+        await tx.insert(cashFlowEntries).values({
+          batchId: existing.batchId ?? undefined,
+          type: 'income',
+          amount: options.refund_amount,
+          category: 'batch_capital_refund',
+          description: `Thu hồi vốn khi xóa/trả món ${existing.id}`,
+        });
+      }
+
+      return {
+        success: true,
+        deleted_id: id,
+        batch_id: existing.batchId,
+      };
+    });
+
+    const existingImages = [
+      ...(Array.isArray(existing.images) ? existing.images : []),
+      ...(Array.isArray(existing.defectImages) ? existing.defectImages : []),
+    ];
+    await uploadService.cleanupOrphanedBlobs(existingImages, []);
+
+    return result;
+  }
+
+  async discardItem(id: string, body: { reason: string; write_off_loss?: boolean }) {
+    const existing = await itemRepository.findById(id);
+    if (!existing) {
+      throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
+    }
+
+    if (existing.status === 'reserved' || existing.status === 'sold') {
+      throw new AppError(
+        'Món đang nằm trong đơn hàng, không thể đánh dấu tiêu hủy',
+        HttpStatus.CONFLICT,
+        ErrorCode.ITEM_IN_ACTIVE_ORDER
+      );
+    }
+
+    return await db.transaction(async (tx) => {
+      const updated = await itemRepository.update(
+        id,
+        {
+          status: 'discarded',
+          discardReason: body.reason.trim(),
+          discardedAt: new Date(),
+        },
+        tx
+      );
+
+      if (body.write_off_loss && existing.costPrice && existing.costPrice > 0) {
+        await tx.insert(cashFlowEntries).values({
+          batchId: existing.batchId ?? undefined,
+          type: 'expense',
+          amount: existing.costPrice,
+          category: 'inventory_loss',
+          description: `Tổn thất hao hụt món ${id}: ${body.reason.trim()}`,
+        });
+      }
+
+      return toAdminDetail(updated!);
+    });
+  }
+
+  async reassignItemBatch(id: string, targetBatchId: string | null) {
+    const existing = await itemRepository.findById(id);
+    if (!existing) {
+      throw new AppError('Sản phẩm không tồn tại', HttpStatus.NOT_FOUND, ErrorCode.ITEM_NOT_FOUND);
+    }
+
+    if (existing.status === 'reserved' || existing.status === 'sold') {
+      throw new AppError(
+        'Món đang trong đơn hàng, không thể chuyển hoặc gỡ kiện',
+        HttpStatus.CONFLICT,
+        ErrorCode.ITEM_IN_ACTIVE_ORDER
+      );
+    }
+
+    let finalBatchId: string | null = null;
+    if (targetBatchId) {
+      finalBatchId = await resolveBatchId(targetBatchId);
+    }
+
+    const updated = await itemRepository.update(id, {
+      batchId: finalBatchId,
+    });
     return toAdminDetail(updated!);
   }
 
@@ -357,7 +676,7 @@ export class AdminService {
   }
 
   async confirmOrder(orderCode: string, shippingFee?: number, note?: string) {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       await orderService.applyHoldExpiry(orderCode, tx as any);
 
       const ord = await tx.query.orders.findFirst({
@@ -408,6 +727,9 @@ export class AdminService {
       void updated;
       return this.detailAfter(orderCode, tx);
     });
+
+    void emailService.maybeSendOrderNotification(orderCode, 'confirmed');
+    return result;
   }
 
   async markDepositPaid(orderCode: string, note?: string) {
@@ -517,7 +839,7 @@ export class AdminService {
   }
 
   async completeOrder(orderCode: string) {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const ord = await tx.query.orders.findFirst({
         where: eq(orders.orderCode, orderCode),
       });
@@ -543,10 +865,13 @@ export class AdminService {
       await markItemsSold(tx, orderCode);
       return this.detailAfter(orderCode, tx);
     });
+
+    void emailService.maybeSendOrderNotification(orderCode, 'completed');
+    return result;
   }
 
   async processReturn(orderCode: string, reason?: string, returnShippingFee?: number) {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const ord = await tx.query.orders.findFirst({
         where: eq(orders.orderCode, orderCode),
       });
@@ -609,6 +934,9 @@ export class AdminService {
 
       return this.detailAfter(orderCode, tx);
     });
+
+    void emailService.maybeSendOrderNotification(orderCode, 'returned', { reason });
+    return result;
   }
 
   async cancelOrder(orderCode: string, reason: string) {
@@ -845,7 +1173,11 @@ export class AdminService {
     name: string;
     import_date: string;
     initial_capital: number;
-    processing_cost: number;
+    shipping_cost?: number;
+    processing_cost?: number;
+    other_cost?: number;
+    target_margin_percent?: number;
+    notes?: string;
   }) {
     const code = data.code.trim().toUpperCase();
     const dup = await batchRepository.findByCode(code);
@@ -855,28 +1187,133 @@ export class AdminService {
       });
     }
 
+    const initialCapital = data.initial_capital;
+    const shippingCost = data.shipping_cost ?? 0;
+    const processingCost = data.processing_cost ?? 0;
+    const otherCost = data.other_cost ?? 0;
+
     const created = await batchRepository.create({
       id: code,
       code,
       name: data.name.trim(),
       importDate: data.import_date,
-      initialCapital: data.initial_capital,
-      processingCost: data.processing_cost ?? 0,
+      initialCapital,
+      shippingCost,
+      processingCost,
+      otherCost,
+      targetMarginPercent: data.target_margin_percent ?? 30,
       status: 'active',
+      notes: data.notes?.trim() || null,
     });
 
-    const capital = created.initialCapital + created.processingCost;
-    if (capital > 0) {
+    if (initialCapital > 0) {
       await db.insert(cashFlowEntries).values({
         batchId: created.id,
         type: 'expense',
-        amount: capital,
+        amount: initialCapital,
         category: 'batch_capital',
-        description: `Vốn kiện ${created.code}`,
+        description: `Vốn mua kiện ${created.code}`,
+      });
+    }
+    if (shippingCost > 0) {
+      await db.insert(cashFlowEntries).values({
+        batchId: created.id,
+        type: 'expense',
+        amount: shippingCost,
+        category: 'batch_shipping',
+        description: `Phí vận chuyển kiện ${created.code}`,
+      });
+    }
+    if (processingCost > 0) {
+      await db.insert(cashFlowEntries).values({
+        batchId: created.id,
+        type: 'expense',
+        amount: processingCost,
+        category: 'batch_processing',
+        description: `Chi phí giặt là / xử lý kiện ${created.code}`,
+      });
+    }
+    if (otherCost > 0) {
+      await db.insert(cashFlowEntries).values({
+        batchId: created.id,
+        type: 'expense',
+        amount: otherCost,
+        category: 'batch_other',
+        description: `Chi phí khác kiện ${created.code}`,
       });
     }
 
     return toBatchSummary(created, emptyBatchStats());
+  }
+
+  async updateBatchCosts(
+    idOrCode: string,
+    data: {
+      name?: string;
+      initial_capital?: number;
+      shipping_cost?: number;
+      processing_cost?: number;
+      other_cost?: number;
+      target_margin_percent?: number;
+      notes?: string;
+    }
+  ) {
+    const existing = await batchRepository.findByIdOrCode(idOrCode);
+    if (!existing) {
+      throw new AppError('Không tìm thấy kiện hàng', HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND);
+    }
+
+    const oldTotal =
+      existing.initialCapital +
+      (existing.shippingCost ?? 0) +
+      existing.processingCost +
+      (existing.otherCost ?? 0);
+
+    const newInitialCapital = data.initial_capital ?? existing.initialCapital;
+    const newShippingCost = data.shipping_cost ?? existing.shippingCost ?? 0;
+    const newProcessingCost = data.processing_cost ?? existing.processingCost;
+    const newOtherCost = data.other_cost ?? existing.otherCost ?? 0;
+    const newTotal = newInitialCapital + newShippingCost + newProcessingCost + newOtherCost;
+    const diff = newTotal - oldTotal;
+
+    const { batches } = await import('../db/schema.js');
+    const updatePayload: Partial<typeof batches.$inferInsert> = {};
+    if (data.name !== undefined) updatePayload.name = data.name.trim();
+    if (data.initial_capital !== undefined) updatePayload.initialCapital = data.initial_capital;
+    if (data.shipping_cost !== undefined) updatePayload.shippingCost = data.shipping_cost;
+    if (data.processing_cost !== undefined) updatePayload.processingCost = data.processing_cost;
+    if (data.other_cost !== undefined) updatePayload.otherCost = data.other_cost;
+    if (data.target_margin_percent !== undefined) updatePayload.targetMarginPercent = data.target_margin_percent;
+    if (data.notes !== undefined) updatePayload.notes = data.notes.trim() || null;
+
+    return await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(batches)
+        .set({ ...updatePayload, updatedAt: new Date() })
+        .where(eq(batches.id, existing.id))
+        .returning();
+
+      if (diff > 0) {
+        await tx.insert(cashFlowEntries).values({
+          batchId: existing.id,
+          type: 'expense',
+          amount: diff,
+          category: 'batch_adjustment',
+          description: `Điều chỉnh tăng chi phí kiện ${existing.code} (+${diff.toLocaleString()}đ)`,
+        });
+      } else if (diff < 0) {
+        await tx.insert(cashFlowEntries).values({
+          batchId: existing.id,
+          type: 'income',
+          amount: Math.abs(diff),
+          category: 'batch_adjustment',
+          description: `Điều chỉnh giảm chi phí kiện ${existing.code} (-${Math.abs(diff).toLocaleString()}đ)`,
+        });
+      }
+
+      const stats = await batchRepository.statsForBatches([existing.id]);
+      return toBatchSummary(updated[0], stats.get(existing.id) ?? emptyBatchStats());
+    });
   }
 
   async getSettings() {

@@ -71,6 +71,7 @@ export class BatchRepository {
         shelf: sql<number>`count(*) filter (where ${items.status} = 'shelf')`,
         reserved: sql<number>`count(*) filter (where ${items.status} = 'reserved')`,
         sold: sql<number>`count(*) filter (where ${items.status} = 'sold')`,
+        discarded: sql<number>`count(*) filter (where ${items.status} = 'discarded')`,
         listTotal: sql<number>`coalesce(sum(${items.price}), 0)`,
         costTotal: sql<number>`coalesce(sum(${items.costPrice}), 0)`,
       })
@@ -90,6 +91,7 @@ export class BatchRepository {
         shelf: Number(row.shelf),
         reserved: Number(row.reserved),
         sold: Number(row.sold),
+        discarded: Number(row.discarded),
       };
       map.set(row.batchId, cur);
     }
