@@ -16,6 +16,7 @@ import { depositWasReceived } from '../utils/deposit-status.util.js';
 import { emptyBatchStats, toBatchSummary } from '../utils/batch-mapper.util.js';
 import type { CashFlowPeriod } from '../utils/cash-flow.util.js';
 import { emailService } from './email.service.js';
+import { uploadService } from './upload.service.js';
 
 async function nextItemId(batchCode: string) {
   const seq = await batchRepository.nextItemSeq(batchCode);
@@ -206,6 +207,17 @@ export class AdminService {
     }
 
     const updated = await itemRepository.update(id, row);
+
+    const oldImages = [
+      ...(Array.isArray(existing.images) ? existing.images : []),
+      ...(Array.isArray(existing.defectImages) ? existing.defectImages : []),
+    ];
+    const newImages = [
+      ...(Array.isArray(body.images) ? body.images : []),
+      ...(Array.isArray(body.defect_images) ? body.defect_images : []),
+    ];
+    await uploadService.cleanupOrphanedBlobs(oldImages, newImages);
+
     return toAdminDetail(updated!);
   }
 
@@ -460,7 +472,7 @@ export class AdminService {
       );
     }
 
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       await itemRepository.delete(id, tx);
 
       if (options?.refund_capital && options.refund_amount && options.refund_amount > 0) {
@@ -479,6 +491,14 @@ export class AdminService {
         batch_id: existing.batchId,
       };
     });
+
+    const existingImages = [
+      ...(Array.isArray(existing.images) ? existing.images : []),
+      ...(Array.isArray(existing.defectImages) ? existing.defectImages : []),
+    ];
+    await uploadService.cleanupOrphanedBlobs(existingImages, []);
+
+    return result;
   }
 
   async discardItem(id: string, body: { reason: string; write_off_loss?: boolean }) {
