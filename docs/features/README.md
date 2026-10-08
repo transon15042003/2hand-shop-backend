@@ -27,6 +27,7 @@ Không nhân bản toàn bộ ROADMAP thành feature trừ khi đang implement. 
 | [`production-hardening`](./production-hardening/) | Helmet, rate limit, deploy — **xong** (local verified) |
 | [`openapi-fe-sync`](./openapi-fe-sync/) | Đồng bộ enum/contract với Frontend — **xong** (local verified) |
 | [`batch-costs-sale-item-mgmt`](./batch-costs-sale-item-mgmt/) | Kiện hàng đa chi phí, Sale sản phẩm & Quản trị tồn kho — **xong** (local verified) |
+| [`customer-email-notifications`](./customer-email-notifications/) | Gửi email khách hàng (OTP đăng ký, xác nhận/giao/hoàn đơn) & Luồng tài khoản chưa xác thực — **xong** (local verified) |
 
 Không tạo folder marketplace (`wishlist`, `buyer-seller-chat`, …) — ngoài phạm vi ADR 000.
 

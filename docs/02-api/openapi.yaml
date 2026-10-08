@@ -322,7 +322,7 @@ paths:
     post:
       operationId: registerCustomer
       summary: Đăng ký tài khoản khách hàng mới
-      description: Tạo tài khoản thành viên mới bằng tên, số điện thoại, email và mật khẩu. Hệ thống sẽ tạo mã OTP xác thực 6 số gửi về email.
+      description: Tạo tài khoản thành viên mới bằng tên, số điện thoại, email và mật khẩu. Hệ thống sẽ tạo mã OTP xác thực 6 số gửi về email. Khách hàng được đăng ký thành công ngay, nhận cookie phiên và thông báo xác thực email để nhận thông tin đơn hàng.
       tags:
         - Customer Auth
       security: []
@@ -426,7 +426,7 @@ paths:
       operationId: loginCustomer
       summary: Đăng nhập tài khoản khách hàng
       description: |
-        Đăng nhập bằng Email hoặc Số điện thoại kèm Mật khẩu. Yêu cầu tài khoản đã xác thực email.
+        Đăng nhập bằng Email hoặc Số điện thoại kèm Mật khẩu. Hỗ trợ khách hàng đăng nhập kể cả khi email chưa xác thực (kèm thông báo nhắc xác thực email để nhận cập nhật đơn hàng).
         Phiên lâu dài (ADR 006): trả cookie httpOnly `hk_small_store_customer_session` (400 ngày, gia hạn khi dùng); khách ở trạng thái đăng nhập trên thiết bị đó tới khi bấm Đăng xuất.
       tags:
         - Customer Auth
@@ -4035,6 +4035,11 @@ components:
           type: string
           description: "Mã OTP mẫu phục vụ kiểm thử nhanh trong môi trường phát triển"
           example: "868868"
+        token:
+          type: string
+          description: "Session token phiên nếu khách được cấp đăng nhập ngay"
+        customer:
+          $ref: '#/components/schemas/CustomerProfile'
 
     CustomerVerifyEmailRequest:
       type: object
@@ -4079,6 +4084,10 @@ components:
           example: "mock-jwt-customer-token"
         customer:
           $ref: '#/components/schemas/CustomerProfile'
+        verification_notice:
+          type: string
+          description: "Thông báo nhắc nhở xác thực email nếu email chưa xác thực"
+          example: "Để nhận thông tin về đơn hàng, vui lòng xác thực email."
 
     CustomerProfile:
       type: object

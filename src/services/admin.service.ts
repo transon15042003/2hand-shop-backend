@@ -15,6 +15,7 @@ import { appendTimeline, toAdminOrderDetail, toAdminOrderSummary } from '../util
 import { depositWasReceived } from '../utils/deposit-status.util.js';
 import { emptyBatchStats, toBatchSummary } from '../utils/batch-mapper.util.js';
 import type { CashFlowPeriod } from '../utils/cash-flow.util.js';
+import { emailService } from './email.service.js';
 
 async function nextItemId(batchCode: string) {
   const seq = await batchRepository.nextItemSeq(batchCode);
@@ -655,7 +656,7 @@ export class AdminService {
   }
 
   async confirmOrder(orderCode: string, shippingFee?: number, note?: string) {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       await orderService.applyHoldExpiry(orderCode, tx as any);
 
       const ord = await tx.query.orders.findFirst({
@@ -706,6 +707,9 @@ export class AdminService {
       void updated;
       return this.detailAfter(orderCode, tx);
     });
+
+    void emailService.maybeSendOrderNotification(orderCode, 'confirmed');
+    return result;
   }
 
   async markDepositPaid(orderCode: string, note?: string) {
@@ -815,7 +819,7 @@ export class AdminService {
   }
 
   async completeOrder(orderCode: string) {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const ord = await tx.query.orders.findFirst({
         where: eq(orders.orderCode, orderCode),
       });
@@ -841,10 +845,13 @@ export class AdminService {
       await markItemsSold(tx, orderCode);
       return this.detailAfter(orderCode, tx);
     });
+
+    void emailService.maybeSendOrderNotification(orderCode, 'completed');
+    return result;
   }
 
   async processReturn(orderCode: string, reason?: string, returnShippingFee?: number) {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const ord = await tx.query.orders.findFirst({
         where: eq(orders.orderCode, orderCode),
       });
@@ -907,6 +914,9 @@ export class AdminService {
 
       return this.detailAfter(orderCode, tx);
     });
+
+    void emailService.maybeSendOrderNotification(orderCode, 'returned', { reason });
+    return result;
   }
 
   async cancelOrder(orderCode: string, reason: string) {

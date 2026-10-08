@@ -19,7 +19,8 @@
     "check:hold-expire": "tsx scripts/check-hold-expire-job.ts",
     "check:openapi-contract": "tsx scripts/check-openapi-contract.ts",
     "check:production-hardening": "tsx scripts/check-production-hardening.ts",
-    "check:batch-costs-sale-item-mgmt": "tsx scripts/check-batch-costs-sale-item-mgmt.ts"
+    "check:batch-costs-sale-item-mgmt": "tsx scripts/check-batch-costs-sale-item-mgmt.ts",
+    "check:customer-email-flow": "tsx scripts/check-customer-email-flow.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
@@ -33,6 +34,7 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.4.0",
+    "nodemailer": "^10.0.16",
     "pg": "^8.13.3",
     "zod": "^3.24.2"
   },
@@ -44,6 +46,7 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/multer": "^2.3.0",
     "@types/node": "^22.13.8",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.11.11",
     "drizzle-kit": "^0.30.4",
     "tsx": "^4.19.3",

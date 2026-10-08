@@ -2,6 +2,7 @@ import { customerRepository } from '../repositories/customer.repository.js';
 import { HashUtil } from '../utils/hash.util.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
+import { emailService } from './email.service.js';
 
 type CustomerRow = NonNullable<Awaited<ReturnType<typeof customerRepository.findById>>>;
 
@@ -61,7 +62,7 @@ export class AuthService {
 
     const customerId = `kh-${Date.now().toString(36)}`;
 
-    await customerRepository.create({
+    const created = await customerRepository.create({
       id: customerId,
       name: data.name,
       phone: data.phone,
@@ -74,11 +75,21 @@ export class AuthService {
       defaultShippingNote: data.defaultShippingNote,
     });
 
+    // Send verification OTP email to customer
+    void emailService.sendRegistrationOtp(data.email, {
+      customerName: data.name,
+      otp,
+    });
+
+    const token = await customerRepository.createSession(customerId);
+
     return {
       success: true,
-      message: 'Đăng ký thành công! Mã xác thực đã được gửi tới email của bạn.',
-      requires_verification: true,
+      message: 'Đăng ký tài khoản thành công! Để nhận thông tin về đơn hàng, vui lòng xác thực email.',
+      requires_verification: false,
       customer_id: customerId,
+      token,
+      customer: await this.toProfile(created),
       demo_otp: process.env.NODE_ENV === 'development' ? otp : undefined,
     };
   }
@@ -132,6 +143,11 @@ export class AuthService {
       otpExpiresAt,
     });
 
+    void emailService.sendRegistrationOtp(customer.email, {
+      customerName: customer.name,
+      otp,
+    });
+
     return {
       success: true,
       message: 'Mã xác thực mới đã được gửi tới email của bạn.',
@@ -150,19 +166,17 @@ export class AuthService {
       throw new AppError('Thông tin đăng nhập không chính xác', HttpStatus.UNAUTHORIZED, ErrorCode.INVALID_CREDENTIALS);
     }
 
-    if (!customer.isVerified) {
-      throw new AppError(
-        'Tài khoản chưa được xác thực email. Vui lòng nhập mã OTP',
-        HttpStatus.UNAUTHORIZED,
-        ErrorCode.EMAIL_NOT_VERIFIED,
-        { email: customer.email }
-      );
-    }
-
     const token = await customerRepository.createSession(customer.id);
+    const profile = await this.toProfile(customer);
+
     return {
       token,
-      customer: await this.toProfile(customer),
+      customer: profile,
+      ...(!customer.isVerified
+        ? {
+            verification_notice: 'Để nhận thông tin về đơn hàng, vui lòng xác thực email.',
+          }
+        : {}),
     };
   }
 

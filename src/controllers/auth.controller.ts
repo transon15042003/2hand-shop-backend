@@ -8,6 +8,9 @@ export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await authService.register(req.body);
+      if (result.token) {
+        setCustomerSessionCookie(res, result.token);
+      }
       return res.status(HttpStatus.CREATED).json(result);
     } catch (error) {
       next(error);
