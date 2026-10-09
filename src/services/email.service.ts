@@ -67,11 +67,22 @@ export class EmailService {
     return `${maskedLocal}@${domain}`;
   }
 
+  /** Gmail only delivers mail whose From is the authenticated mailbox. */
+  private fromHeader(): string {
+    const configured = appConfig.emailFrom?.trim() ?? '';
+    if (this.transporter && appConfig.smtpUser) {
+      if (configured.includes(appConfig.smtpUser)) return configured;
+      return `HK Small Store <${appConfig.smtpUser}>`;
+    }
+    if (configured && !configured.includes('@hksmallstore.com')) return configured;
+    return 'HK Small Store <onboarding@resend.dev>';
+  }
+
   /**
    * Core send email method.
    * Priority:
-   * 1. Resend API (HTTP fetch) if RESEND_API_KEY is present
-   * 2. Nodemailer SMTP if SMTP_USER & SMTP_PASS are configured
+   * 1. Gmail SMTP when SMTP_USER and SMTP_PASS are set
+   * 2. Resend API if RESEND_API_KEY is present
    * 3. Fallback to console logger (Dev mode)
    */
   async sendEmail(options: SendEmailOptions): Promise<boolean> {
@@ -79,13 +90,20 @@ export class EmailService {
     const maskedTo = this.maskEmail(to);
 
     try {
-      // 1. Resend API
-      if (appConfig.resendApiKey) {
-        const fromHeader =
-          appConfig.emailFrom && !appConfig.emailFrom.includes('@hksmallstore.com')
-            ? appConfig.emailFrom
-            : 'HK Small Store <onboarding@resend.dev>';
+      if (this.transporter) {
+        await this.transporter.sendMail({
+          from: this.fromHeader(),
+          to,
+          subject,
+          html,
+          text,
+        });
 
+        Logger.info(`[EMAIL] Sent email via SMTP to ${maskedTo} | Subject: "${subject}"`);
+        return true;
+      }
+
+      if (appConfig.resendApiKey) {
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -93,7 +111,7 @@ export class EmailService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: fromHeader,
+            from: this.fromHeader(),
             to: [to],
             subject,
             html,
@@ -108,20 +126,6 @@ export class EmailService {
         }
 
         Logger.info(`[EMAIL] Sent email via Resend to ${maskedTo} | Subject: "${subject}"`);
-        return true;
-      }
-
-      // 2. Nodemailer SMTP
-      if (this.transporter) {
-        await this.transporter.sendMail({
-          from: appConfig.emailFrom,
-          to,
-          subject,
-          html,
-          text,
-        });
-
-        Logger.info(`[EMAIL] Sent email via SMTP to ${maskedTo} | Subject: "${subject}"`);
         return true;
       }
 
