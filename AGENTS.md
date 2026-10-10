@@ -31,7 +31,16 @@ Health check: `GET /api/health`
 8. **Không log PII** (SĐT, email, địa chỉ, token thô). Xem [`docs/05-quality/security.md`](docs/05-quality/security.md).
 9. **Không thêm dependency** nếu stdlib / package đã có đủ việc.
 10. **Không sửa** `docs/adr/` đã chốt trừ khi viết ADR mới supersede.
-11. **Git + feature ship**: Làm việc trên `feat/<slug>` (không commit thẳng `main`). Feature xong → commit → push nhánh → PR → merge `main` trước khi mở feature kế. SSOT: [`docs/06-operations/git-workflow.md`](docs/06-operations/git-workflow.md), [`.cursor/rules/git-workflow.mdc`](.cursor/rules/git-workflow.mdc), [`.cursor/rules/feature-ship.mdc`](.cursor/rules/feature-ship.mdc).
+11. **Git workflow & branching/merge rules**:
+    - **Không commit thẳng `main`** (trừ hotfix khẩn cấp có user duyệt). Luôn bắt đầu từ `main` mới nhất (`git checkout main && git pull`).
+    - **Tạo nhánh đúng trường hợp**: `feat/<slug>` (tính năng mới theo feature folder), `fix/<short>` (bugfix), `hotfix/<short>` (vá lỗi khẩn cấp prod), `chore/<short>` (tooling/deps/CI), `docs/<short>` (tài liệu/quy tắc), `refactor/<short>` (tái cấu trúc code).
+    - **Quy trình merge khác nhau**:
+      - *Squash and Merge* (mặc định) cho hầu hết PRs để giữ `main` sạch sẽ, tuyến tính, dễ revert.
+      - *Merge Commit (`--no-ff`)* chỉ dùng khi gộp nhánh lớn (Epic) hoặc nhánh có chuỗi atomic commits quan trọng cần lưu vết lịch sử.
+      - *Hotfix flow*: Review ưu tiên → Squash merge → Deploy prod ngay → Forward-fix DB nếu có.
+      - *Đồng bộ FE*: PR Backend merge và deploy trước → sync OpenAPI sang FE repo → PR Frontend merge sau.
+    - **Feature ship gate**: 1 nhánh/PR xong → commit → push → PR → merge `main` trước khi mở feature tiếp theo.
+    - SSOT: [`docs/06-operations/git-workflow.md`](docs/06-operations/git-workflow.md), [`.cursor/rules/git-workflow.mdc`](.cursor/rules/git-workflow.mdc), [`.cursor/rules/feature-ship.mdc`](.cursor/rules/feature-ship.mdc).
 
 ## Docs map
 
