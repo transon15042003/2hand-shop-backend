@@ -7,15 +7,44 @@ alwaysApply: true
 
 Full doc: [`docs/06-operations/git-workflow.md`](../../docs/06-operations/git-workflow.md).
 
-## Always
+## Branch Creation Rules
 
-1. Start from updated `main`: `git checkout main && git pull`.
-2. Work on `feat/<slug>`, `fix/<short>`, `chore/<short>`, or `docs/<short>` — **never commit directly to `main`** unless the user explicitly allows a hotfix.
-3. One feature slug → one branch → one PR. Push the branch; open PR with `gh pr create`.
-4. Prefer **squash merge** into `main`. Then pull `main` locally and delete the feature branch.
-5. Do not start the next feature until the previous PR is merged (or the user says otherwise).
-6. No force-push to `main`. No interactive rebase. No secrets in commits.
+Always create new branches from up-to-date `main`: `git checkout main && git pull`.
+Use the appropriate branch prefix for each scenario:
+- `feat/<slug>`: New features mapped to `docs/features/<slug>/`.
+- `fix/<short>`: Regular bugfixes not covered by a feature spec.
+- `hotfix/<short>`: Urgent production issues (minimal diff, rapid review & deploy).
+- `chore/<short>`: Tooling, dependencies, build/CI configuration.
+- `docs/<short>`: Documentation, ADRs, and developer guidelines only.
+- `refactor/<short>`: Code restructuring without API or business logic changes.
 
-## With feature-ship
+**Never commit directly to `main`** (unless an urgent hotfix is explicitly approved by the user).
 
-When `docs/features/<slug>/` AC pass: commit on the feature branch → push → PR → merge → only then open the next slug. See [`feature-ship.mdc`](./feature-ship.mdc).
+## Merge Strategies & Procedures
+
+1. **Squash and Merge (Default)**:
+   - Default for almost all PRs (`feat/*`, `fix/*`, `chore/*`, `docs/*`).
+   - Keeps `main` commit history clean and linear; makes rollbacks easy via single-commit revert.
+   - Commit title must follow Conventional Commits: `<type>(<scope>): <summary> (#<PR>)`.
+
+2. **Merge Commit (`--no-ff`)**:
+   - Used only for large Epic branches or branches with atomic commits whose step-by-step history must be preserved.
+   - Individual commits must be clean and meaningful (no "wip" or "fix typo" commits).
+
+3. **Hotfix Flow**:
+   - Priority review & fast-tracked pre-merge checks (`typecheck` + smoke test).
+   - Squash merge into `main` → immediate production deploy.
+   - DB forward-fix only (never revert live DB migrations).
+
+4. **Frontend Contract Sync**:
+   - Backend PR modifying `docs/02-api/openapi.yaml` must be merged & deployed first.
+   - Sync OpenAPI contract to Frontend repo (`contracts/openapi.yaml`).
+   - Frontend PR merged after verifying against the deployed backend.
+
+## Pre-merge Checklist & Feature-ship
+
+- [ ] `pnpm run typecheck` passes with 0 errors.
+- [ ] `pnpm run build` succeeds.
+- [ ] Reviewed generated migration SQL if DB schema changed.
+- [ ] No secrets or unneeded files committed.
+- [ ] 1 branch = 1 PR = 1 feature/fix. Do not start the next feature until the current PR is merged and local `main` is pulled. See [`feature-ship.mdc`](./feature-ship.mdc).
