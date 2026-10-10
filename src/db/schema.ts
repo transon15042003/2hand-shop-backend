@@ -178,7 +178,7 @@ export const customers = pgTable('customers', {
   id: varchar('id', { length: 50 }).primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 20 }).notNull().unique(),
-  email: varchar('email', { length: 255 }).unique(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   isVerified: boolean('is_verified').notNull().default(false),
   verificationOtp: varchar('verification_otp', { length: 10 }),

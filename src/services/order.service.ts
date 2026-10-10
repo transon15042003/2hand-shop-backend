@@ -6,6 +6,8 @@ import { orderRepository } from '../repositories/order.repository.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
 import { toPublicSummary } from '../utils/item-mapper.util.js';
+import { emailService } from './email.service.js';
+
 function dedupeIds(ids: string[]): string[] {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
 }
@@ -92,6 +94,7 @@ export class OrderService {
       if (updated.orderStatus === 'cancelled') cancelled += 1;
       else if (updated.orderStatus === 'confirmed') {
         confirmed += 1;
+        void emailService.maybeSendOrderNotification(row.orderCode, 'confirmed');
       }
     }
 

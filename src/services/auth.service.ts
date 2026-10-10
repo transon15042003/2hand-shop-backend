@@ -2,12 +2,15 @@ import { customerRepository } from '../repositories/customer.repository.js';
 import { HashUtil } from '../utils/hash.util.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import { HttpStatus, ErrorCode } from '../constants/http-status.js';
+import { emailService } from './email.service.js';
+
 type CustomerRow = NonNullable<Awaited<ReturnType<typeof customerRepository.findById>>>;
 
 export type CustomerProfile = {
   id: string;
   name: string;
   phone: string;
+  email: string;
   is_verified: boolean;
   has_completed_order: boolean;
   default_shipping_address: string | null;
@@ -22,6 +25,7 @@ export class AuthService {
       id: customer.id,
       name: customer.name,
       phone: customer.phone,
+      email: customer.email,
       is_verified: customer.isVerified,
       has_completed_order: hasCompleted,
       default_shipping_address: customer.defaultShippingAddress ?? null,
@@ -33,10 +37,18 @@ export class AuthService {
   async register(data: {
     name: string;
     phone: string;
+    email: string;
     password: string;
     defaultShippingAddress?: string;
     defaultShippingNote?: string;
   }) {
+    const existingEmail = await customerRepository.findByEmail(data.email);
+    if (existingEmail) {
+      throw new AppError('Email này đã được đăng ký', HttpStatus.CONFLICT, ErrorCode.EMAIL_ALREADY_EXISTS, {
+        email: 'Email đã tồn tại',
+      });
+    }
+
     const existingPhone = await customerRepository.findByPhone(data.phone);
     if (existingPhone) {
       throw new AppError('Số điện thoại này đã được đăng ký', HttpStatus.CONFLICT, ErrorCode.PHONE_ALREADY_EXISTS, {
@@ -45,27 +57,40 @@ export class AuthService {
     }
 
     const passwordHash = await HashUtil.hashPassword(data.password);
+    const otp = HashUtil.generateOtp(6);
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
     const customerId = `kh-${Date.now().toString(36)}`;
 
     const created = await customerRepository.create({
       id: customerId,
       name: data.name,
       phone: data.phone,
+      email: data.email,
       passwordHash,
-      isVerified: true,
+      isVerified: false,
+      verificationOtp: otp,
+      otpExpiresAt,
       defaultShippingAddress: data.defaultShippingAddress,
       defaultShippingNote: data.defaultShippingNote,
+    });
+
+    // Send verification OTP email to customer
+    void emailService.sendRegistrationOtp(data.email, {
+      customerName: data.name,
+      otp,
     });
 
     const token = await customerRepository.createSession(customerId);
 
     return {
       success: true,
-      message: 'Đăng ký tài khoản thành công.',
+      message: 'Đăng ký tài khoản thành công! Để nhận thông tin về đơn hàng, vui lòng xác thực email.',
       requires_verification: false,
       customer_id: customerId,
       token,
       customer: await this.toProfile(created),
+      demo_otp: process.env.NODE_ENV === 'development' ? otp : undefined,
     };
   }
 
@@ -118,6 +143,11 @@ export class AuthService {
       otpExpiresAt,
     });
 
+    void emailService.sendRegistrationOtp(customer.email, {
+      customerName: customer.name,
+      otp,
+    });
+
     return {
       success: true,
       message: 'Mã xác thực mới đã được gửi tới email của bạn.',
@@ -126,7 +156,7 @@ export class AuthService {
   }
 
   async login(identifier: string, password: string) {
-    const customer = await customerRepository.findByPhone(identifier);
+    const customer = await customerRepository.findByIdentifier(identifier);
     if (!customer) {
       throw new AppError('Thông tin đăng nhập không chính xác', HttpStatus.UNAUTHORIZED, ErrorCode.INVALID_CREDENTIALS);
     }
@@ -142,6 +172,11 @@ export class AuthService {
     return {
       token,
       customer: profile,
+      ...(!customer.isVerified
+        ? {
+            verification_notice: 'Để nhận thông tin về đơn hàng, vui lòng xác thực email.',
+          }
+        : {}),
     };
   }
 

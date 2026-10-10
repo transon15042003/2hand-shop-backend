@@ -1,17 +1,16 @@
 import { z } from 'zod';
 
-const phoneSchema = z.string().regex(/^(0|\+84)(3|5|7|8|9)[0-9]{8}$/, 'Số điện thoại không đúng định dạng');
-
 export const registerSchema = z.object({
   name: z.string().min(2, 'Họ và tên phải có ít nhất 2 ký tự'),
-  phone: phoneSchema,
+  phone: z.string().regex(/^(0|\+84)(3|5|7|8|9)[0-9]{8}$/, 'Số điện thoại không đúng định dạng'),
+  email: z.string().email('Email không đúng định dạng'),
   password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
   defaultShippingAddress: z.string().optional(),
   defaultShippingNote: z.string().optional(),
 });
 
 export const loginSchema = z.object({
-  identifier: phoneSchema,
+  identifier: z.string().min(1, 'Vui lòng nhập Email hoặc Số điện thoại'),
   password: z.string().min(1, 'Vui lòng nhập Mật khẩu'),
 });
 
