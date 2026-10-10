@@ -15,7 +15,6 @@ import { appendTimeline, toAdminOrderDetail, toAdminOrderSummary } from '../util
 import { depositWasReceived } from '../utils/deposit-status.util.js';
 import { emptyBatchStats, toBatchSummary } from '../utils/batch-mapper.util.js';
 import type { CashFlowPeriod } from '../utils/cash-flow.util.js';
-import { emailService } from './email.service.js';
 import { uploadService } from './upload.service.js';
 
 async function nextItemId(batchCode: string) {
@@ -728,7 +727,6 @@ export class AdminService {
       return this.detailAfter(orderCode, tx);
     });
 
-    void emailService.maybeSendOrderNotification(orderCode, 'confirmed');
     return result;
   }
 
@@ -866,7 +864,6 @@ export class AdminService {
       return this.detailAfter(orderCode, tx);
     });
 
-    void emailService.maybeSendOrderNotification(orderCode, 'completed');
     return result;
   }
 
@@ -935,7 +932,6 @@ export class AdminService {
       return this.detailAfter(orderCode, tx);
     });
 
-    void emailService.maybeSendOrderNotification(orderCode, 'returned', { reason });
     return result;
   }
 

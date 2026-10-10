@@ -4,7 +4,7 @@ import type { AdminPermission } from '../constants/admin-permissions.js';
 export interface CustomerSessionPayload {
   customerId: string;
   phone: string;
-  email: string;
+  email: string | null;
 }
 
 export interface AuthenticatedAdmin {
@@ -19,7 +19,7 @@ export interface AuthenticatedRequest extends Request {
   customer?: {
     id: string;
     phone: string;
-    email: string;
+    email: string | null;
     name: string;
   };
   /** Raw session cookie/Bearer token (for logout-all / change-password). */
