@@ -47,14 +47,18 @@ export class EmailService {
 
   private initTransporter() {
     if (appConfig.smtpUser && appConfig.smtpPass) {
+      const isSecure = appConfig.smtpSecure ?? (appConfig.smtpPort === 465);
       this.transporter = nodemailer.createTransport({
         host: appConfig.smtpHost || 'smtp.gmail.com',
         port: appConfig.smtpPort || 587,
-        secure: appConfig.smtpSecure ?? false,
+        secure: isSecure,
         auth: {
           user: appConfig.smtpUser,
-          pass: appConfig.smtpPass,
+          pass: appConfig.smtpPass.replace(/\s+/g, ''),
         },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 10000,
       });
     }
   }
@@ -67,43 +71,46 @@ export class EmailService {
     return `${maskedLocal}@${domain}`;
   }
 
-  /** Gmail only delivers mail whose From is the authenticated mailbox. */
-  private fromHeader(): string {
+  /**
+   * Resend requires a verified domain or falls back to onboarding@resend.dev.
+   * Never leaks personal @gmail.com to customers.
+   */
+  private getResendSender(): string {
     const configured = appConfig.emailFrom?.trim() ?? '';
-    if (this.transporter && appConfig.smtpUser) {
+    if (!configured || configured.includes('@hksmallstore.com') || configured.includes('@gmail.com')) {
+      return 'HK Small Store <onboarding@resend.dev>';
+    }
+    return configured;
+  }
+
+  /** Gmail SMTP requires From header to match the authenticated mailbox. */
+  private getSmtpSender(): string {
+    const configured = appConfig.emailFrom?.trim() ?? '';
+    if (appConfig.smtpUser) {
       if (configured.includes(appConfig.smtpUser)) return configured;
       return `HK Small Store <${appConfig.smtpUser}>`;
     }
-    if (configured && !configured.includes('@hksmallstore.com')) return configured;
-    return 'HK Small Store <onboarding@resend.dev>';
+    return configured || 'HK Small Store <no-reply@hksmallstore.com>';
   }
 
   /**
    * Core send email method.
    * Priority:
-   * 1. Gmail SMTP when SMTP_USER and SMTP_PASS are set
-   * 2. Resend API if RESEND_API_KEY is present
+   * 1. Resend API (HTTP fetch) when RESEND_API_KEY is present
+   *    - Sender: HK Small Store <onboarding@resend.dev> (or verified custom domain)
+   *    - Preserves privacy: never reveals personal Gmail address
+   *    - Communicates over HTTPS (port 443), never blocked by Render Free tier
+   * 2. Nodemailer SMTP (fallback if Resend is unset and SMTP credentials exist)
    * 3. Fallback to console logger (Dev mode)
    */
   async sendEmail(options: SendEmailOptions): Promise<boolean> {
     const { to, subject, html, text } = options;
     const maskedTo = this.maskEmail(to);
 
-    try {
-      if (this.transporter) {
-        await this.transporter.sendMail({
-          from: this.fromHeader(),
-          to,
-          subject,
-          html,
-          text,
-        });
-
-        Logger.info(`[EMAIL] Sent email via SMTP to ${maskedTo} | Subject: "${subject}"`);
-        return true;
-      }
-
-      if (appConfig.resendApiKey) {
+    // 1. Resend API (HTTP fetch) - Primary provider
+    if (appConfig.resendApiKey) {
+      try {
+        const fromSender = this.getResendSender();
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -111,7 +118,7 @@ export class EmailService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: this.fromHeader(),
+            from: fromSender,
             to: [to],
             subject,
             html,
@@ -122,29 +129,49 @@ export class EmailService {
         if (!response.ok) {
           const errData = await response.text();
           Logger.error(`[EMAIL] Failed to send email via Resend to ${maskedTo}: ${errData}`);
-          return false;
+        } else {
+          Logger.info(`[EMAIL] Sent email via Resend to ${maskedTo} | From: "${fromSender}" | Subject: "${subject}"`);
+          return true;
         }
-
-        Logger.info(`[EMAIL] Sent email via Resend to ${maskedTo} | Subject: "${subject}"`);
-        return true;
+      } catch (resendError: any) {
+        Logger.error(`[EMAIL] Error calling Resend API for ${maskedTo}: ${resendError?.message || resendError}`);
       }
-
-      // 3. Dev Mock Fallback
-      Logger.info(
-        `[EMAIL DEV MOCK] No email provider configured. Mock sending to ${maskedTo} | Subject: "${subject}"`
-      );
-      if (appConfig.isDev) {
-        console.log(`\n================== [DEV EMAIL PREVIEW] ==================`);
-        console.log(`To: ${to}`);
-        console.log(`Subject: ${subject}`);
-        if (text) console.log(`Body (text): ${text}`);
-        console.log(`=========================================================\n`);
-      }
-      return true;
-    } catch (error: any) {
-      Logger.error(`[EMAIL] Error sending email to ${maskedTo}: ${error?.message || error}`);
-      return false;
     }
+
+    // 2. Nodemailer SMTP (Secondary fallback if configured)
+    if (this.transporter) {
+      try {
+        const fromSender = this.getSmtpSender();
+        await this.transporter.sendMail({
+          from: fromSender,
+          to,
+          subject,
+          html,
+          text,
+        });
+
+        Logger.info(`[EMAIL] Sent email via SMTP to ${maskedTo} | Subject: "${subject}"`);
+        return true;
+      } catch (smtpError: any) {
+        Logger.error(`[EMAIL] Failed to send email via SMTP to ${maskedTo}: ${smtpError?.message || smtpError}`);
+      }
+    }
+
+    // 3. Dev Mock Fallback
+    if (appConfig.isDev) {
+      Logger.info(
+        `[EMAIL DEV MOCK] No functional email provider succeeded. Mock preview to ${maskedTo} | Subject: "${subject}"`
+      );
+      console.log(`\n================== [DEV EMAIL PREVIEW] ==================`);
+      console.log(`To: ${to}`);
+      console.log(`Subject: ${subject}`);
+      if (text) console.log(`Body (text): ${text}`);
+      console.log(`=========================================================\n`);
+      return true;
+    }
+
+    Logger.error(`[EMAIL] All email sending providers failed for recipient ${maskedTo}`);
+    return false;
   }
 
   /**

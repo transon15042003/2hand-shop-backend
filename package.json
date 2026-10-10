@@ -20,7 +20,8 @@
     "check:openapi-contract": "tsx scripts/check-openapi-contract.ts",
     "check:production-hardening": "tsx scripts/check-production-hardening.ts",
     "check:batch-costs-sale-item-mgmt": "tsx scripts/check-batch-costs-sale-item-mgmt.ts",
-    "check:customer-email-flow": "tsx scripts/check-customer-email-flow.ts"
+    "check:customer-email-flow": "tsx scripts/check-customer-email-flow.ts",
+    "email:test": "tsx scripts/test-email.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
