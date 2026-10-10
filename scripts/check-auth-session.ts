@@ -1,13 +1,13 @@
 /**
  * Runnable check for auth-session (ADR 006 + OpenAPI paths).
- * Requires: server on PORT (default 5000), seeded customer khachhang@hksmallstore.vn / 123456
+ * Requires: server on PORT (default 5000), seeded customer 0901234567 / password123
  * Usage: pnpm exec tsx scripts/check-auth-session.ts
  */
 import 'dotenv/config';
 
 const base = `http://localhost:${process.env.PORT || 5000}/api`;
-const email = 'khachhang@hksmallstore.vn';
-const password = process.env.SEED_CUSTOMER_PASSWORD || '123456';
+const phone = '0901234567';
+const password = process.env.SEED_CUSTOMER_PASSWORD || 'password123';
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -31,7 +31,7 @@ async function main() {
   const loginRes = await fetch(`${base}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier: email, password }),
+    body: JSON.stringify({ identifier: phone, password }),
   });
   assert(loginRes.status === 200, `login status ${loginRes.status}: ${await loginRes.clone().text()}`);
   const setCookie = loginRes.headers.get('set-cookie');
@@ -43,22 +43,22 @@ async function main() {
 
   const loginBody = (await loginRes.json()) as {
     token: string;
-    customer: { email: string; is_verified: boolean };
+    customer: { phone: string; is_verified: boolean };
   };
-  assert(loginBody.token && loginBody.customer?.email === email, 'login body shape');
+  assert(loginBody.token && loginBody.customer?.phone === phone && !('email' in loginBody.customer), 'login body shape');
   assert(loginBody.customer.is_verified === true, 'seed customer verified');
 
   // Session with cookie
   const sess = await fetch(`${base}/auth/session`, { headers: { Cookie: cookie! } });
   assert(sess.status === 200, `session auth status ${sess.status}`);
-  const sessBody = (await sess.json()) as { customer: { email: string } | null };
-  assert(sessBody.customer?.email === email, 'session customer');
+  const sessBody = (await sess.json()) as { customer: { phone: string } | null };
+  assert(sessBody.customer?.phone === phone, 'session customer');
 
   // Me
   const me = await fetch(`${base}/auth/me`, { headers: { Cookie: cookie! } });
   assert(me.status === 200, `me status ${me.status}`);
-  const meBody = (await me.json()) as { email: string; has_completed_order: boolean };
-  assert(meBody.email === email && typeof meBody.has_completed_order === 'boolean', 'me profile');
+  const meBody = (await me.json()) as { phone: string; has_completed_order: boolean };
+  assert(meBody.phone === phone && typeof meBody.has_completed_order === 'boolean', 'me profile');
 
   // Admin login
   const admin = await fetch(`${base}/admin/auth/login`, {
