@@ -3992,6 +3992,7 @@ components:
       required:
         - name
         - phone
+        - email
         - password
       properties:
         name:
@@ -4000,6 +4001,10 @@ components:
         phone:
           type: string
           example: "0901234567"
+        email:
+          type: string
+          format: email
+          example: "khachhang@hksmallstore.vn"
         password:
           type: string
           format: password
@@ -4019,7 +4024,7 @@ components:
           example: true
         message:
           type: string
-          example: "Đăng ký tài khoản thành công."
+          example: "Đăng ký thành công! Mã xác thực đã được gửi tới email của bạn."
         requires_verification:
           type: boolean
           example: true
@@ -4090,6 +4095,7 @@ components:
         - id
         - name
         - phone
+        - email
         - is_verified
         - has_completed_order
         - created_at
@@ -4106,7 +4112,7 @@ components:
         email:
           type: string
           format: email
-          description: Không còn trả về. Cửa hàng không thu thập email.
+          example: "khachhang@hksmallstore.vn"
         is_verified:
           type: boolean
           example: true
